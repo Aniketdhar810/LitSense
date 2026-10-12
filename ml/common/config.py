@@ -1,7 +1,8 @@
 """Load and validate ml/config.yaml, the only home of hyperparameters, paths and thresholds."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -61,12 +62,21 @@ def validate_config(cfg: Any) -> None:
     missing = [s for s in REQUIRED_SECTIONS if s not in cfg]
     if missing:
         raise ConfigError(f"missing config sections: {missing}")
+    not_mappings = [s for s in REQUIRED_SECTIONS if not isinstance(cfg[s], Mapping)]
+    if not_mappings:  # e.g. a section left empty in the YAML loads as None
+        raise ConfigError(f"config sections must be mappings: {not_mappings}")
+    checks: list[tuple[str, Callable[[], list[str]]]] = [
+        *((key, partial(_check_regex_list, cfg, key)) for key in REGEX_LISTS),
+        ("aspects", partial(_check_aspects, cfg["aspects"])),
+        ("ranking", partial(_check_buckets, cfg["ranking"])),
+        ("data", partial(_check_data, cfg["data"])),
+    ]
     problems: list[str] = []
-    for key in REGEX_LISTS:
-        problems += _check_regex_list(cfg, key)
-    problems += _check_aspects(cfg["aspects"])
-    problems += _check_buckets(cfg["ranking"])
-    problems += _check_data(cfg["data"])
+    for name, check in checks:
+        try:
+            problems += check()
+        except (ConfigError, KeyError, TypeError, IndexError) as e:  # missing or mistyped keys
+            problems.append(f"{name}: malformed ({type(e).__name__}: {e})")
     if not isinstance(cfg["project"].get("seed"), int):
         problems.append("project.seed must be an int")
     if problems:

@@ -450,7 +450,10 @@ def _input_id(spec: str, paths: RunPaths, registry: StageRegistry) -> str:
         manifest = read_manifest(paths.manifest(producer.name))
         if not is_complete(manifest) or not location.exists():
             raise StageError(f"input {spec!r} needs stage {producer.name!r} to run first")
-        return manifest["files"][spec]["sha256"]
+        entry = manifest.get("files", {}).get(spec)
+        if entry is None:  # spec was added to the producer's outputs after its last run
+            raise StageError(f"input {spec!r} needs stage {producer.name!r} to run again")
+        return entry["sha256"]
     if not location.exists():
         raise StageError(f"missing input {spec!r} (expected at {location})")
     stat = location.stat()

@@ -50,6 +50,9 @@ def test_unknown_key_raises(repo_config: dict[str, Any]) -> None:
         (lambda c: c["ranking"]["quotas"]["warm"].pop("longtail"), "same candidate sources"),
         (lambda c: c["data"].update(split_quantiles=[0.9, 0.85]), "split_quantiles"),
         (lambda c: c.pop("llm"), "missing config sections"),
+        (lambda c: c.update(ranking=None), r"must be mappings: \['ranking'\]"),
+        (lambda c: c["aspects"].pop("names"), r"aspects: malformed \(KeyError"),
+        (lambda c: c["spoiler"].update(regex_patterns=None), "regex_patterns: malformed"),
     ],
 )
 def test_structural_mistakes_are_rejected(

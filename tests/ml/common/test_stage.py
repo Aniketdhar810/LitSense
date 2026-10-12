@@ -227,6 +227,19 @@ def test_upstream_must_complete_first(cfg: dict[str, Any]) -> None:
     assert stage_status("t.second", cfg, registry=reg).startswith("blocked")
 
 
+def test_output_added_after_producer_ran_blocks_cleanly(cfg: dict[str, Any]) -> None:
+    run_stage("t.first", cfg, registry=pipeline([]))
+    reg = StageRegistry()  # t.first now also declares an output its old manifest lacks
+    reg.stage("t.first", outputs=["data:first.parquet", "data:extra.txt"])(lambda ctx: None)
+    reg.stage("t.next", inputs=["data:first.parquet", "data:extra.txt"], outputs=["data:n.txt"])(
+        lambda ctx: None
+    )
+    Path(RunPaths.from_config(cfg, None).resolve("data:extra.txt")).write_text("stray")
+    assert stage_status("t.next", cfg, registry=reg) == (
+        "blocked: input 'data:extra.txt' needs stage 't.first' to run again"
+    )
+
+
 def test_sample_mode_uses_local_roots(tmp_config: dict[str, Any], tmp_path: Path) -> None:
     write_raw(tmp_config, "user,item\nu1,a\nu2,b\nu3,c\n", sample=True)
     calls: list[str] = []

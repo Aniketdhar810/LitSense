@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read  # the job only reads the repo; it never pushes
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -13,6 +16,8 @@ jobs:
         python-version: ["3.11", "3.12"]  # 3.11: backend/serving image; 3.12: Colab
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
