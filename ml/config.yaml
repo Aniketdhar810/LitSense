@@ -11,6 +11,7 @@ sources:
   meta_books:    https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz
   reviews_books: https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Books.jsonl.gz
   goodreads_page: https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads/UCSD%20Book%20Graph.html
+  goodreads_base: https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads   # + /<file>; the page's Drive links 404
   goodreads_files: [goodreads_books.json.gz, goodreads_book_series.json.gz,
                     goodreads_book_works.json.gz, goodreads_reviews_spoiler.json.gz]
   fasttext_lid: https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz

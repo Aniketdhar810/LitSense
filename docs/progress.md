@@ -57,3 +57,20 @@
 ### Next (Phase 1, Week 2)
 `data.download`, `data.meta` with `category_counts.csv`, then stop for the user to choose the genre slice;
 `data.goodreads`.
+
+## 2026-10-12: Raw sample data and format inspection
+
+### Built
+- `local/raw_sample/` (gitignored): first 200,000 lines of the 5-core ratings, 50,000 of `meta_Books`, 50,000
+  of the reviews and 5,000 of the Goodreads spoiler file, streamed with `curl | gunzip | head` (no full
+  downloads) and stored gzipped under the original names.
+- `ml/config.yaml`: `sources.goodreads_base` (UCSD mirror; the Drive links are dead).
+- `docs/decisions.md`: D15 (Goodreads source), D16 (sample files), F1–F12 (format findings).
+
+### Tests run
+- `pytest tests/ml/common/test_config.py` and the raw-file-name test after the config change: pass.
+
+### Open issues
+1. F1: `meta_Books` includes Kindle editions (about 21% of 5-core interactions in the sample) and audiobooks;
+   the user decides before `data.canonical` (Week 3) whether to keep them as editions of their works.
+2. The Week-2 plan (download stages, framework fixes, `data.meta`, `data.goodreads`) still awaits approval.
