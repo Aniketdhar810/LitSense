@@ -1,0 +1,148 @@
+project:
+  seed: 42
+  data_version: v0              # v0 ~100K interactions (development), v1 ~250K (final)
+  drive_root: /content/drive/MyDrive/litsense
+  raw_root: /content/raw
+  local_root: ./local           # used by --sample runs
+  local_raw_root: ./local/raw   # raw files read by --sample runs (relative paths are repo-relative)
+
+sources:
+  ratings_5core: https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/benchmark/5core/rating_only/Books.csv.gz
+  meta_books:    https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz
+  reviews_books: https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Books.jsonl.gz
+  goodreads_page: https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads/UCSD%20Book%20Graph.html
+  goodreads_files: [goodreads_books.json.gz, goodreads_book_series.json.gz,
+                    goodreads_book_works.json.gz, goodreads_reviews_spoiler.json.gz]
+  fasttext_lid: https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz
+
+data:
+  genre_slices: []              # SET AFTER EDA (s7.2); top-level category names under Books
+  fiction_allowlist: [Literature & Fiction, Science Fiction & Fantasy,
+                      'Mystery, Thriller & Suspense', Romance, Teen & Young Adult]
+  title_blocklist: [journal, planner, notebook, coloring book, colouring book, calendar,
+                    sticker book, activity book, blank book, workbook, study guide,
+                    cliffsnotes, sparknotes, summary of, test prep, puzzle book]
+  min_pages: 40
+  min_review_chars: 20
+  max_review_chars: 5000
+  kcore: {user: 5, item: 10}    # tune after EDA
+  target_interactions: {v0: 100000, v1: 250000}
+  size_tolerance: 0.15
+  split_quantiles: [0.85, 0.925]
+  relevance_min_rating: 4
+  longtail_fraction: 0.8
+  sparsity_buckets: [[1, 2], [3, 5], [6, 10], [11, 20], [21, 1000000]]
+  # regex entries containing '?' must be quoted: PyYAML ends a plain flow scalar at '?'
+  shipping_patterns: [arrived damaged, 'pages (were )?(missing|falling out|torn|blank)',
+                      wrong (book|edition|item), '(print|font) (is|was) (too )?(small|tiny|blurry)',
+                      binding, 'cover (was )?(bent|damaged|ripped)', kindle (version|formatting),
+                      the seller, shipping, package, delivered]
+
+canonical:
+  drop_boxsets: true
+  fuzzy_threshold: 90           # rapidfuzz token_set_ratio on normalized titles
+  max_year_gap: 3
+  boxset_patterns: ['box(ed)? set', omnibus, complete series, complete collection,
+                    collection set, 'books? \d+ ?(-|to|through) ?\d+', '\d+ ?books? set', trilogy set]
+  edition_noise: [hardcover, paperback, mass market, large print, unabridged, abridged,
+                  illustrated edition, anniversary edition, special edition, deluxe edition,
+                  collector's edition, reprint, kindle edition, audio cd, library binding,
+                  a novel, a thriller, a mystery, a memoir]
+
+models:
+  lightgcn: {dim: 64, layers: 3, lr: 0.001, batch_size: 4096, max_epochs: 300,
+             reg: 1.0e-5, n_negs: 5, eval_every: 5, patience: 10,
+             inner_val_fraction: 0.1, inner_val_min_user: 6, metric: ndcg@20}
+  als: {factors: 64, regularization: 0.01, iterations: 30, alpha: 20}
+  itemknn: {k: 100, shrink: 10}
+  popularity: {bayes_m: 10, trend_half_life_days: 180}
+  projection: {lr: 0.001, epochs: 10, steps_per_epoch: 1000, batch_size: 1024,
+               normalize_items: true, shuffled_control: true}
+  static_fusion_alphas: [0.5, 0.7, 0.9]   # control only
+
+content:
+  model_name: sentence-transformers/all-MiniLM-L6-v2
+  max_seq_length: 256
+  batch_size: 256
+  anisotropy_warn: 0.5
+
+nlp:
+  spacy_n_process: 2            # fall back to 1 if Colab hangs
+  min_sentence_tokens: 4
+  max_sentence_tokens: 80
+  sentence_embed_batch: 512
+  sentiment_model: distilbert-base-uncased-finetuned-sst-2-english
+  sentiment_batch: 256
+  clause_split_markers: [' but ', ' although ', ' though ', ' however ', ' yet ', ' whereas ']
+  pos_threshold: 0.5
+  neg_threshold: -0.5
+
+aspects:
+  names: [plot, writing_style, characters, world_building, pacing, editing_quality,
+          dialogue, humor, emotional_impact, ending, complexity, tone_dark]
+  tau_default: 0.45             # tune per aspect in s11.5
+  tau: {}
+  shrinkage_k: 5
+  user_half_life_days: 730
+  user_explicit_weight: 0.6     # vs implicit (liked items' profiles)
+  descriptors: [darkness, pace, complexity_level]
+  rating_weights: {5: 1.0, 4: 0.5, 3: 0.0, 2: -0.5, 1: -1.0}
+
+spoiler:
+  sample_size: 200000
+  holdout_fraction: 0.1
+  C_grid: [0.1, 1.0, 10.0]
+  target_recall: 0.9
+  regex_boost: 0.15
+  late_position_boost: 0.05     # sentences in last 30% of a review
+  regex_patterns: [\bdies\b, \bdied\b, \bkilled\b, turns out, in the end, the ending,
+                   twist (is|was), revealed to be, is actually, \bmarries\b, it was all,
+                   the killer, the murderer, ends up]
+
+ranking:
+  candidates_total: 200
+  quotas:                       # by interaction bucket; sums exceed 200 on purpose (dedupe)
+    cold:     {cf: 0,  semantic: 110, item_item: 40, popularity: 50, author: 0,  aspect: 20, longtail: 20}
+    warming:  {cf: 40, semantic: 80,  item_item: 40, popularity: 35, author: 10, aspect: 20, longtail: 20}
+    blending: {cf: 70, semantic: 60,  item_item: 40, popularity: 25, author: 15, aspect: 25, longtail: 20}
+    warm:     {cf: 90, semantic: 55,  item_item: 40, popularity: 25, author: 15, aspect: 25, longtail: 20}
+  buckets: {cold: [0, 0], warming: [1, 4], blending: [5, 19], warm: [20, 1000000]}
+  min_reviews_main_feed: 3
+  negatives_per_positive: 30
+  ranker_user_split: 0.8
+  lgbm: {objective: lambdarank, n_estimators: 500, learning_rate: 0.05, num_leaves: 31,
+         min_child_samples: 20, colsample_bytree: 0.8, subsample: 0.8, subsample_freq: 1,
+         early_stopping_rounds: 50, eval_at: [10]}
+  blend: {alpha_k: 8, w_pop: 0.1, w_aspect: 0.15}
+  postprocess: {mmr_lambda: 0.75, mmr_pool: 50, genre_cap: 4, explore_slot: 8}
+  overrides: {pinned_aspect_boost: 0.1}
+
+serving:
+  bundle_dir: artifacts/serve_bundle
+  max_rss_mb: 350
+  onnx_quantized: true
+  onnx_threads: 1
+  verify_hashes_on_load: false
+
+llm:
+  enabled: true
+  provider: gemini              # gemini | openai_compat | fake
+  model: SET-ME                 # current Gemini Flash-Lite id; verify on the deprecations page
+  model_quality: SET-ME         # current Gemini Flash id, offline synthesis only
+  api_key_env: GEMINI_API_KEY
+  temperature: {explain: 0.3, chat: 0.5, parse: 0.0, synthesis: 0.3}
+  max_output_tokens: {explain: 120, chat: 400, parse: 400, synthesis: 200}
+  timeout_s: 8
+  max_retries: 2
+  rpm_limit: 12                 # stay under the free-tier limit
+  daily_request_budget: 1200
+  cache_path: .cache/llm.sqlite
+  cache_ttl_hours: 168
+  explain_max_words: 60
+  chat_max_words: 120
+
+eval:
+  ks: [5, 10, 20, 50]
+  primary: ndcg@10
+  bootstrap_resamples: 1000
+  cold_user_sim: {n_users: 500, min_relevant: 8, onboarding_picks: 3}
