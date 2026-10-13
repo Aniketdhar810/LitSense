@@ -41,6 +41,17 @@ You are implementing the ML and GenAI half of LitSense, a book recommender for a
 
 After each phase gate, write a short summary in `docs/progress.md`: the gate checklist ticked, and any metrics produced, copied from `results/` files (never typed by hand). Then stop and tell the user the gate is ready for review.
 
+### 0.5 Current state and decisions that override this brief (read `context.md` first)
+
+`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D27, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
+
+- **Stage fingerprints (§7.0):** code part = the stage's module plus its transitive `ml`/`litsense_core` imports, not the repo-wide git SHA (D6). Input identity = the sha256 the producer recorded (D7).
+- **Large sources are streamed, never stored (§7.1, §7.5, D18):** `url:<source>` stage inputs; `ml/data/stream.py` (gunzip on the fly, HTTP Range resume, `PartWriter` checkpoints). `data.download` keeps only the 5-core CSV on Drive (D19). `--sample N` reads heads in `local/raw_sample/`.
+- **Goodreads graph is optional (§1.5, §7.3, D20):** `data.use_goodreads_graph: false` (default). When on, keep only Goodreads rows whose ISBN-13 matches `books_raw` (incl. Kindle page-source ISBNs). Files come from `sources.goodreads_base` (the Drive links are dead, D15).
+- **Kindle and audiobook records stay (F1, D17):** they are editions of the same work; `data.canonical` must merge them with print (ISBN incl. `page_source_isbn13`, else title+author heuristic with box-set/volume guards).
+- **Genre slices are set (D26):** Literature & Fiction; Mystery, Thriller & Suspense; Science Fiction & Fantasy.
+- **Environment:** Colab runs Python 3.13; pins work on 3.11–3.13; `make install-colab` never installs torch (D21); fastText is `fasttext-predict` (D25). Notebooks are committed without outputs; CI enforces it (D27).
+
 ## 1. Project context
 
 ### 1.1 What LitSense is
