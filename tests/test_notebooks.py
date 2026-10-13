@@ -25,6 +25,7 @@ def test_notebook_has_no_outputs(path: Path) -> None:
     dirty = [
         cell.get("id", str(i))
         for i, cell in enumerate(notebook["cells"])
-        if cell["cell_type"] == "code" and (cell.get("outputs") or cell.get("execution_count"))
+        if cell["cell_type"] == "code"
+        and (cell.get("outputs") or cell.get("execution_count") is not None)  # 0 is dirty too
     ]
     assert not dirty, f"{path.name}: cells with outputs or execution counts: {dirty}; clear them"
