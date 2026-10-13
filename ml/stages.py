@@ -20,7 +20,12 @@ from ml.common.errors import ConfigError, StageError
 from ml.common.stage import REGISTRY, StageRegistry, run_all, run_stage, stage_status
 
 # Modules whose @stage decorators register the pipeline. Each phase appends its own.
-STAGE_MODULES: tuple[str, ...] = ("ml.data.download", "ml.data.meta", "ml.data.goodreads")
+STAGE_MODULES: tuple[str, ...] = (
+    "ml.data.download",
+    "ml.data.meta",
+    "ml.data.goodreads",
+    "ml.data.canonical",
+)
 
 
 def load_stages() -> StageRegistry:

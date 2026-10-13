@@ -34,6 +34,7 @@ REGEX_LISTS = (
     "data.shipping_patterns",
     "canonical.boxset_patterns",
     "canonical.edition_noise",
+    "canonical.subtitle_noise_patterns",
     "spoiler.regex_patterns",
 )
 

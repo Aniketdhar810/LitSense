@@ -366,3 +366,76 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Alternatives:** an `nbstripout` pre-commit hook (a new dependency, and hooks do not run when Colab
   commits directly).
 
+
+## 2026-10-13: Week 3, part 1 (`data.canonical`)
+
+### D28. Edition canonicalization rules (deviations from §7.4; thresholds await the merge audit)
+- **Merge all editions first, then slice (user, rule A):** the 454,008 `books_raw` editions are merged into
+  works, and a work is kept if *any* edition's `categories[1]` is a genre slice. §7.4 filtered by slice
+  first. Why: Amazon files editions of one work under different categories. In the Week 2 lookup, the
+  Project Hail Mary audiobook sits in SF & Fantasy and the print editions in Literature & Fiction; Mistborn
+  book 1 and the box set sit in SF & Fantasy and books 2–6 in Literature & Fiction. Slicing first would
+  split works and lose their Kindle ratings. `asin_to_canonical.in_slice_edition` and the report's
+  `rescued_*` counts show how much rule A adds.
+- **Merge rules, in order:** `isbn` (same ISBN-13, ISBN-10s converted); `page_source` (a Kindle edition's
+  "Page numbers source ISBN" equals a print edition's ISBN, F1/D17, unless both have authors and they
+  differ); `goodreads` (same work id, only with `use_goodreads_graph`); `title` (below). Union-find; two
+  components are never joined if they hold different Goodreads works or different known volume numbers.
+- **Title rule:** block by (first token of the normalized title, author surname); merge when
+  `token_set_ratio >= fuzzy_threshold` (90, §5) **and** `token_sort_ratio >= subset_guard_threshold` (90,
+  new key) **and** the same author key **and** the volume guard passes **and**, only for non-identical
+  normalized titles, the year gap is at most `max_year_gap` (3).
+  - *Subset guard:* `token_set_ratio` is 100 whenever one title's words are a subset of the other's:
+    "martian" vs "martian chronicles", "alex cross" vs "alex cross s trial".
+  - *Year gap only for non-identical titles:* reissues of the same title can be decades apart, and Kindle
+    publication years differ from print.
+  - *Volume guard:* conflict when both volumes are known and differ, or when one is unknown and the other is
+    2 or more ("Mistborn" may be book 1, never book 3). Known cost: a Kindle title carrying "(Series, Book 2)"
+    does not merge **by title** with a print edition whose title has no marker (it still merges by ISBN or
+    page-source ISBN). The audit's `not_merged` rows with reason `volume` show how often this happens.
+  - *Author required:* editions without an author never merge by title.
+- **Matching key (`ml/data/titles.py`):** NFKC, lowercase, every bracketed segment dropped (series info is
+  read first), a subtitle after ':' dropped when it is format noise, marketing or a volume marker
+  ("A Novel", "TikTok sensation", "Book Three of Mistborn"), trailing format words and dates dropped
+  ("Paperback 18 Feb 2021"), punctuation stripped, leading article dropped. New config:
+  `canonical.subtitle_noise_patterns`, plus edition-noise terms (US/UK/international/revised/new edition,
+  reissue, movie/media tie-in, MTI).
+- **Box sets:** excluded from every rule, shared ISBNs included, and dropped (`drop_boxsets: true`).
+- **Canonical record (§7.4 step 7):** title = the most-rated edition's title with format noise removed
+  (series bracket kept); author = most common author key (ties go to the most-rated edition); description and
+  `features` = the longest among editions (D24); year = min; pages = median; image and ISBN-13 from the
+  most-rated edition that has one; also `slices`, `primary_slice` (first slice among the editions, most-rated
+  first), `edition_kinds`, `n_interactions`. Series: Goodreads when enabled, else parsed from titles, with
+  `series_id = "am_<author key>:<series key>"`. Ids: `gr_<work_id>` or `am_<min parent_asin>`.
+- **Audit (§7.4 step 9):** `merge_audit.csv` has 100 random kept works with 2 or more editions (up to 15
+  edition rows each, scored against the most-rated edition) and 50 title pairs that were not merged
+  (`token_set >= 80`), spread over the reasons `below_threshold`, `subset_guard`, `volume`, `year` and
+  `goodreads_work`, drawn from a seeded reservoir of 2,000 pairs per reason (all pairs are counted in the
+  report). The reviewer fills `verdict` (Y = right decision, N = wrong). The file is UTF-8 with a BOM so
+  Excel opens it correctly. Both audit files are under `results:canonical/`, so they reach the repo with
+  `results/v0/` (user rule B: only `results/v0/` and the registry entry are copied from Drive, never data
+  files).
+- **Open (§0.3):** merge precision from the user's review is recorded here before `data.reviews` runs; the
+  thresholds above are not accepted until then.
+- **Alternatives:** slice first (§7.4 as written); `token_set_ratio` alone; `fuzz.WRatio`; no volume guard
+  for one-sided volumes.
+
+### D29. Genre labels (`ml/data/genres.py`, §7.4 step 8)
+- 26 ordered keyword labels plus the fallback "Fiction (general)". A path's labels come from its **deepest**
+  element that matches anything, so "Fantasy" wins over the compound top level "Science Fiction & Fantasy",
+  which would match both. Audience labels (Young Adult, Children's) are added from any level. A work's
+  genres are the union over its editions, most-rated first; `primary_genre` is the first non-audience label.
+- **Limitation measured on the 50,000-line sample head:** 24,817 of the 69,963 in-slice interactions sit
+  under "Literature & Fiction > Genre Fiction" with no deeper level, so those works get the fallback label.
+  Genres are filters and ranker features, not the slice rule. If the full-run EDA shows the fallback
+  dominating, Goodreads shelves (with `use_goodreads_graph`) are the obvious refinement.
+- **Alternatives:** labels from the top level only (too coarse); every matching label at every level (SF &
+  Fantasy books would all get both labels).
+
+### D30. `data.lid` keeps `lid.176.ftz` in `data/` (user decision C)
+- A separate stage, `data.lid` (in `ml/data/download.py`), fetches fastText's language-ID model (0.9 MB,
+  always whole, even in `--sample` runs) for `data.clean` and checks the fastText magic number, so an HTML
+  error page cannot pass as a model.
+- **Side effect on Colab:** this change and the new config validation (`ml/common/config.py`) are in the
+  code fingerprints of `data.download` and `data.meta`, so both rerun once (about 8 minutes, mostly the
+  `meta_Books` stream); `require_genre_slices` now takes the slice list.

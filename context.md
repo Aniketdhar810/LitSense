@@ -1,7 +1,7 @@
 # LitSense: session handoff (as of 2026-10-13)
 
 Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/progress.md` (session log) and
-`docs/decisions.md` (D1–D27, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
+`docs/decisions.md` (D1–D30, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
 
 ## Where the project stands
 
@@ -12,20 +12,18 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
   `data.goodreads` (registered in `ml/stages.py`). Full Colab run: 9,488,297 ratings / 776,370 users /
   495,063 items; `data.meta` 446 s, 454,008 books in `books_raw.parquet` (13,408 blocklist + 27,647
   `min_pages` drops). Genre slices chosen and recorded (D26).
-- **Open gate item:** the user runs, on Colab with `main` freshly cloned:
-  `python -m ml.data.meta --find "Project Hail Mary" "The Martian" "Mistborn" "Circe" "Gone Girl" "The Silent Patient" "The Midnight Library" "Where the Crawdads Sing"`
-  and pastes the output. Review which category each title landed in and its interactions (concern:
-  Amazon's `categories[1]` is not always the genre, e.g. The Handmaid's Tale → Politics & Social Sciences).
-  Then tick the gate in `docs/progress.md`.
-- **Next: Week 3 plan (shown to the user, NOT yet approved).** `data.canonical`, `data.reviews`, `data.clean`,
-  `data.kcore_split`, `data.eda` (EDA must report the genre mix at every step: slices → works → k-core →
-  sizing, to show how much SF & Fantasy survives). Waiting on user answers:
-  - A. Merge all 454,008 books into works first, then keep a work if any edition is in a slice (instead of
-    §7.4's slice-before-merge, which would lose Kindle editions filed under another category)?
-  - B. How results reach the repo: the user downloads `MyDrive/litsense/results/v0/` and gives the path; Claude
-    commits it (no Colab "Save in GitHub").
-  - C. `data.download` also keeps `lid.176.ftz` (0.9 MB) in `data/`.
-  Do not start Week 3 before approval.
+- **Week 2 gate: closed** (title lookups reviewed, see `docs/progress.md`).
+- **Week 3 part 1: `data.canonical` built (D28–D30), PR open / merged by the user.** Plan approved with:
+  A = merge all editions into works, keep a work if any edition is in a slice; B = results return via
+  Google Drive for desktop (or a zip of `results/v0/`), copy only `results/v0/` and the registry entry into
+  the repo, never data files; C = `data.lid` keeps `lid.176.ftz` in `data/`.
+- **Waiting on the user:** run the Week 3 cells of `notebooks/01_data.ipynb` on Colab (data.download and
+  data.meta rerun once, ~8 min, because their code fingerprints changed), then review
+  `results/v0/canonical/merge_audit.csv` (fill `verdict` Y/N). Record merge precision in D28. **Do not run
+  `data.reviews` before that.** Thresholds (fuzzy 90, subset guard 90, year gap 3) need the user's OK
+  after the audit (§0.3).
+- **Then (Week 3 part 2):** `data.reviews`, `data.clean` (needs `ml/nlp/aspect_seeds.py` lexicons),
+  `data.kcore_split`, `data.eda` (genre mix at every step: slices → works → k-core → sizing), registry hash.
 
 ## Data facts that matter (measured; see F1–F12)
 

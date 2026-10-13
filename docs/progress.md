@@ -167,5 +167,52 @@
 ### Gate (Week 2)
 - [x] `data.download`, `data.meta`, `data.goodreads` built, tested, run in full on Colab
 - [x] Genre slices chosen by the user and recorded (config, D26)
-- [ ] Title lookups (user runs `--find` on Colab; results reviewed) — last item before closing the gate
+- [x] Title lookups run on Colab and reviewed (2026-10-13, see below): **Week 2 gate closed**
+
+## 2026-10-13: Week 2 gate closed; Week 3 part 1 (`data.canonical`)
+
+### Week 2 gate: title lookups (`python -m ml.data.meta --find`, full Colab run)
+- All eight titles are in `books_raw`. Under rule A (D28), every one has a kept work.
+- Editions of one work sit in different categories: Project Hail Mary print in Literature & Fiction, audio
+  in SF & Fantasy; Mistborn book 1 and the box set in SF & Fantasy, books 2–6 in Literature & Fiction; The
+  Midnight Library has editions in SF & Fantasy, Literature & Fiction, no category and Textbooks.
+- The most-rated edition is often Kindle: Gone Girl 8,184 interactions, The Silent Patient 2,217, Circe 743.
+- The lookup rows became a regression test of the expected work groupings
+  (`test_real_titles_from_the_gate_lookup`).
+- User answers (Week 3 plan approved): A = merge all editions, keep a work if any edition is in a slice;
+  B = results come back through Google Drive for desktop (or a zip of `results/v0/`), only `results/v0/` and
+  the registry entry are copied into the repo; C = keep `lid.176.ftz` in `data/`.
+
+### Built
+- `ml/data/titles.py`: matching key, display title, box-set and volume detection, series parsing, author key.
+- `ml/data/genres.py`: 26 genre labels plus fallback (D29).
+- `ml/data/canonical.py`: stage `data.canonical` (D28). Outputs `asin_to_canonical.parquet`,
+  `books_canonical.parquet`, `results/v0/canonical/canonical_report.json` and `merge_audit.csv`; CLI
+  `python -m ml.data.canonical` prints the report summary.
+- Stage `data.lid` (D30); config `canonical.subtitle_noise_patterns`, `canonical.subset_guard_threshold`,
+  more edition-noise terms; `notebooks/01_data.ipynb` Week 3 cells.
+
+### Tests run
+- `ruff check .`, `ruff format --check .`: clean. `pytest -m "not slow"`: 225 passed, 1 skipped (torch).
+  New: titles 33, genres 3, canonical 12 (§16.2 cases, the subset trap, other authors, Kindle page-source
+  ISBN, Goodreads works, the gate-lookup titles, the tiny fixture end to end with Goodreads off and on, a
+  seeded audit), `data.lid` 2.
+- Local sample `run all --until data.canonical --sample 50000`: download 41.6 s, lid 1.2 s (the real model
+  passed the magic-number check), meta 15.5 s, goodreads 0.1 s, canonical 2.2 s. On the 7,135-edition
+  head: 7,108 works (27 with 2+ editions, all `title` merges), 36 box sets, 2,612 kept works with 69,687
+  interactions. All 12 kept multi-edition works in the sample audit are correct on inspection; the head is
+  too small to measure precision (the first 50K meta lines rarely hold two editions of a work).
+- Scale check (laptop, sample head copied 64 times = 456,640 editions with heavy duplication): prepare
+  38 s, merge 103 s, records 39 s. That run produced 3.7M near-miss pairs, so near misses are now kept in a
+  bounded reservoir per reason.
+- Bug found and fixed: pandas stored missing volume numbers as NaN, and NaN != NaN made the volume guard
+  block every merge in frames that mixed known and unknown volumes. Volumes now stay `None`, with a
+  regression test.
+
+### Gate (Week 3, part 1): status
+- [x] `data.canonical` built and tested; `--sample` run passes locally
+- [x] Decisions logged (D28–D30)
+- [ ] Full run on Colab (`notebooks/01_data.ipynb`, Week 3 cells)
+- [ ] User reviews `results/v0/canonical/merge_audit.csv`; merge precision recorded in D28
+- Then: `data.reviews`, `data.clean`, `data.kcore_split`, `data.eda`, registry hash.
 
