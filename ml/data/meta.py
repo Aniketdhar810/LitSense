@@ -9,7 +9,8 @@ with print editions (D17).
 This is where the automatic pipeline pauses: the stage writes ``category_counts.csv`` and a slice
 proposal, and every later stage calls ``require_genre_slices`` before doing anything.
 
-    python -m ml.data.meta [--sample N]    # print the category report of the last run
+    python -m ml.data.meta [--sample N]                 # category report of the last run
+    python -m ml.data.meta --find "Circe" "Gone Girl"   # look titles up in books_raw
 """
 
 import argparse
@@ -357,13 +358,65 @@ def write_books(parts: Sequence[Path], path: Path) -> int:
     return duplicates
 
 
+def find_titles(books: pd.DataFrame, queries: Sequence[str], limit: int = 10) -> pd.DataFrame:
+    """Editions whose title contains each query (case-insensitive), most interactions first.
+
+    ``books`` needs ``parent_asin``, ``title``, ``author``, ``categories``, ``edition_kind`` and
+    ``n_interactions``. Matching is plain substring search: editions of one work appear as separate
+    rows until data.canonical merges them.
+    """
+    titles = books["title"].str.casefold()
+    rows = []
+    for query in queries:
+        hits = books[titles.str.contains(query.casefold(), regex=False)]
+        hits = hits.sort_values("n_interactions", ascending=False).head(limit)
+        for book in hits.itertuples():
+            rows.append(
+                {
+                    "query": query,
+                    "title": book.title,
+                    "author": book.author,
+                    "category": book.categories[1] if len(book.categories) > 1 else NO_CATEGORY,
+                    "edition_kind": book.edition_kind,
+                    "n_interactions": int(book.n_interactions),
+                    "parent_asin": book.parent_asin,
+                }
+            )
+        if hits.empty:
+            rows.append({"query": query, "title": None, "n_interactions": 0})
+    return pd.DataFrame(rows)
+
+
 def main(argv: Sequence[str] | None = None) -> int:
-    """Print the category report of the last data.meta run."""
-    parser = argparse.ArgumentParser(description="Print the category report of data.meta.")
+    """Print the category report of the last data.meta run, or look titles up in books_raw."""
+    parser = argparse.ArgumentParser(description="Report on data.meta's outputs.")
     parser.add_argument("--config", help="config YAML path (default ml/config.yaml)")
-    parser.add_argument("--sample", type=int, metavar="N", help="report on the --sample run")
+    parser.add_argument("--sample", type=int, metavar="N", help="read the --sample run")
+    parser.add_argument("--find", nargs="+", metavar="TITLE", help="look titles up in books_raw")
     args = parser.parse_args(argv)
     paths = RunPaths.from_config(load_config(args.config), args.sample)
+    if args.find:
+        books = pd.read_parquet(
+            paths.resolve("data:books_raw.parquet"),
+            columns=[
+                "parent_asin",
+                "title",
+                "author",
+                "categories",
+                "edition_kind",
+                "n_interactions",
+            ],
+        )
+        found = find_titles(books, args.find)
+        with pd.option_context("display.width", 200, "display.max_colwidth", 60):
+            for query, group in found.groupby("query", sort=False):
+                total = int(group["n_interactions"].sum())
+                editions = int(group["title"].notna().sum())
+                print()
+                print(f"{query!r}: {total:,} interactions over {editions} edition(s)")
+                if group["title"].notna().any():
+                    print(group.drop(columns="query").to_string(index=False))
+        return 0
     counts = pd.read_csv(paths.resolve("data:category_counts.csv"), keep_default_na=False)
     proposal = json.loads(paths.resolve("data:genre_slice_proposal.json").read_text("utf-8"))
     print(category_report(counts, proposal))

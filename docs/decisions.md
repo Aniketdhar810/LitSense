@@ -334,3 +334,35 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Alternatives:** compiling `fasttext` from source on every Colab session; pinning Colab to an older
   runtime (not offered for free accounts).
 
+## 2026-10-13: Genre slices and repository hygiene
+
+### D26. Genre slices: Literature & Fiction; Mystery, Thriller & Suspense; Science Fiction & Fantasy
+- **Decision (user):** `data.genre_slices: [Literature & Fiction, 'Mystery, Thriller & Suspense',
+  Science Fiction & Fantasy]` (values of `categories[1]`).
+- **Evidence (full Colab run of `data.meta`, 2026-10-13, 446 s):** 4,448,181 meta lines; all 495,063
+  5-core items found; 13,408 dropped by the title blocklist and 27,647 by `min_pages`; 454,008 books in
+  `books_raw`. 5-core interactions per allowlisted category: Literature & Fiction 2,143,678 (24.6%, 98,546
+  books, 30.9% Kindle); Mystery, Thriller & Suspense 2,064,657 (23.7%, 56,335 books, 70.6% Kindle); Teen &
+  Young Adult 383,164 (4.4%); Science Fiction & Fantasy 202,160 (2.3%, 12,939 books); Romance 122,661 (1.4%).
+- **Reason:** the §7.2 rule proposed the first two (4,208,335 interactions, threshold 1,000,000). The user
+  added Science Fiction & Fantasy (total 4,410,495) because the PRD's demo and persona examples are mostly
+  SF and fantasy; without the slice those books would not exist in the catalogue.
+- **To watch in Week 3:** SF & Fantasy is small (2.3%); the EDA reports the genre mix after k-core and
+  sizing to show how much of it survives. Amazon's `categories[1]` is not always the literary genre (in the
+  sample, "The Handmaid's Tale" is under Politics & Social Sciences and Harry Potter under Children's Books),
+  so some well-known fiction falls outside the slices; the title lookups at the gate check this.
+- **Alternatives:** the two proposed slices only; adding Teen & Young Adult (larger than SF & Fantasy but
+  further from the demo examples).
+
+### D27. Notebooks are committed without outputs
+- **Decision:** `tests/test_notebooks.py` fails CI if any notebook in `notebooks/` has cell outputs or
+  execution counts (no new dependency; checked against the Colab-saved notebook, which it rejects). The user
+  will not use Colab's "Save in GitHub" again.
+- **Why:** Colab's "Save in GitHub" committed three executed copies of `01_data.ipynb` (with outputs) to
+  `claude/litsense-week2-data`. Outputs belong on Drive and in `results/`, not in git (rule 0.2.11).
+- **Branch cleanup:** the Colab fix `7b3fc9e` missed PR #3's merge; it was cherry-picked onto a fresh branch
+  from `main` (`claude/litsense-week2-colab-fixes`) without the three Colab commits, and
+  `claude/litsense-week2-data` was deleted once nothing on it was needed.
+- **Alternatives:** an `nbstripout` pre-commit hook (a new dependency, and hooks do not run when Colab
+  commits directly).
+

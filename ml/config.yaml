@@ -17,7 +17,8 @@ sources:
   fasttext_lid: https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz
 
 data:
-  genre_slices: []              # SET AFTER EDA (s7.2); top-level category names under Books
+  genre_slices: [Literature & Fiction, 'Mystery, Thriller & Suspense',
+                 Science Fiction & Fantasy]   # user choice 2026-10-13 (D26); categories[1] values
   use_goodreads_graph: false    # ISBN join to the Goodreads book graph; user enables after data.meta
   stream: {chunk_bytes: 1048576, retries: 5, timeout_s: 60, checkpoint_rows: 50000}
   genre_slice_rule: {min_slices: 2, max_slices: 3, target_multiple: 4}   # s7.2 proposal only

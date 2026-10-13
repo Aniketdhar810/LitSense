@@ -143,3 +143,29 @@
 - Rerun `notebooks/01_data.ipynb` on Colab. Because `data.meta`'s code changed, its fingerprint changed
   and the interrupted run's checkpoints are discarded: the stage starts the stream from the beginning.
 
+## 2026-10-13: Full Colab run, genre slices, notebook check
+
+### Full Colab run of `notebooks/01_data.ipynb` (branch `main` at `04c3419`)
+- The notebook cloned `main`, which lacked the fix `7b3fc9e`, so the pinned install failed again on
+  `fasttext-wheel` and the stages ran on Colab's preinstalled pandas 2.2.3 / pyarrow 23.0.1 / numpy 2.1.3
+  (Python 3.13.15). The stages do not depend on those versions; the outputs are valid.
+- `data.download`: 23.9 s; 9,488,297 ratings, 776,370 users, 495,063 items.
+- `data.meta`: 446 s; 4,448,181 lines read; 495,063 matched; dropped 13,408 (title blocklist) and
+  27,647 (`min_pages`); 454,008 books in `books_raw`; no duplicate parent_asins. Category table in D26.
+- `data.goodreads`: flag off, empty tables, 0.1 s.
+
+### Built
+- Fresh branch `claude/litsense-week2-colab-fixes` from `main` with the Colab fix cherry-picked (D27).
+- `tests/test_notebooks.py`: CI fails on notebooks with outputs (D27).
+- `data.genre_slices` set (D26); `require_genre_slices` test updated.
+- `python -m ml.data.meta --find TITLE ...`: title lookup in `books_raw` (category, edition kind, 5-core
+  interactions per edition).
+
+### Tests run
+- `ruff check .`, `ruff format --check .`: clean. `pytest -m "not slow"`: 175 passed, 1 skipped (torch).
+
+### Gate (Week 2)
+- [x] `data.download`, `data.meta`, `data.goodreads` built, tested, run in full on Colab
+- [x] Genre slices chosen by the user and recorded (config, D26)
+- [ ] Title lookups (user runs `--find` on Colab; results reviewed) — last item before closing the gate
+
