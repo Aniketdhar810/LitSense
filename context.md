@@ -13,7 +13,10 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
   495,063 items; `data.meta` 446 s, 454,008 books in `books_raw.parquet` (13,408 blocklist + 27,647
   `min_pages` drops). Genre slices chosen and recorded (D26).
 - **Week 2 gate: closed** (title lookups reviewed, see `docs/progress.md`).
-- **Week 3 part 1: `data.canonical` built (D28–D30), PR open / merged by the user.** Plan approved with:
+- **Week 3 part 1: `data.canonical` built (D28–D30): PR #6, branch `claude/litsense-week3-canonical`
+  (commit 5d681f7), open, awaiting the user's merge and CI.** Stages now: download, lid, meta, goodreads,
+  canonical (`ml/stages.py`). New modules: `ml/data/titles.py`, `genres.py`, `canonical.py`;
+  `python -m ml.data.canonical [--sample N]` prints the report. Plan approved with:
   A = merge all editions into works, keep a work if any edition is in a slice; B = results return via
   Google Drive for desktop (or a zip of `results/v0/`), copy only `results/v0/` and the registry entry into
   the repo, never data files; C = `data.lid` keeps `lid.176.ftz` in `data/`.
@@ -24,6 +27,22 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
   after the audit (§0.3).
 - **Then (Week 3 part 2):** `data.reviews`, `data.clean` (needs `ml/nlp/aspect_seeds.py` lexicons),
   `data.kcore_split`, `data.eda` (genre mix at every step: slices → works → k-core → sizing), registry hash.
+
+## Week 3 implementation notes (for the next session)
+
+- `canonical.py`: `prepare` (keys) → `merge` (union-find `Works`; `isbn`, `page_source`, `goodreads`,
+  `title` rules; `NearMisses` = seeded reservoir of 2,000 per reason) → `canonical_records` (list-based,
+  fast) → `fill_texts` (batched read of description/features) → report + audit (`merge_audit.csv`,
+  utf-8-sig, `verdict` column for the user).
+- Pitfall fixed: keep nullable per-edition values (volume, year, pages) as Python `None` in object
+  columns; pandas NaN broke `volume_conflict` (NaN != NaN).
+- Known trade-off to look for in the audit: the volume guard blocks a title merge between
+  "Title (Series, Book 2)" and a marker-less "Title" (reason `volume`).
+- Genres: ~35% of in-slice sample interactions are under "Literature & Fiction > Genre Fiction" with no
+  deeper level → "Fiction (general)" (D29).
+- Notebook generator lives only in the session scratchpad (`make_notebooks.py`); if lost, edit
+  `notebooks/01_data.ipynb` JSON directly and keep cells output-free (CI test).
+- Laptop scale test: ~457K synthetic editions take ~3 min for prepare+merge+records.
 
 ## Data facts that matter (measured; see F1–F12)
 
