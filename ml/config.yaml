@@ -4,19 +4,23 @@ project:
   drive_root: /content/drive/MyDrive/litsense
   raw_root: /content/raw
   local_root: ./local           # used by --sample runs
-  local_raw_root: ./local/raw   # raw files read by --sample runs (relative paths are repo-relative)
+  local_raw_root: ./local/raw_sample   # --sample runs read local heads of streamed sources from here
 
 sources:
   ratings_5core: https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/benchmark/5core/rating_only/Books.csv.gz
   meta_books:    https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/meta_categories/meta_Books.jsonl.gz
   reviews_books: https://mcauleylab.ucsd.edu/public_datasets/data/amazon_2023/raw/review_categories/Books.jsonl.gz
   goodreads_page: https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads/UCSD%20Book%20Graph.html
+  goodreads_base: https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads   # + /<file>; the page's Drive links 404
   goodreads_files: [goodreads_books.json.gz, goodreads_book_series.json.gz,
                     goodreads_book_works.json.gz, goodreads_reviews_spoiler.json.gz]
   fasttext_lid: https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz
 
 data:
   genre_slices: []              # SET AFTER EDA (s7.2); top-level category names under Books
+  use_goodreads_graph: false    # ISBN join to the Goodreads book graph; user enables after data.meta
+  stream: {chunk_bytes: 1048576, retries: 5, timeout_s: 60, checkpoint_rows: 50000}
+  genre_slice_rule: {min_slices: 2, max_slices: 3, target_multiple: 4}   # s7.2 proposal only
   fiction_allowlist: [Literature & Fiction, Science Fiction & Fantasy,
                       'Mystery, Thriller & Suspense', Romance, Teen & Young Adult]
   title_blocklist: [journal, planner, notebook, coloring book, colouring book, calendar,

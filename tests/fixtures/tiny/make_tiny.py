@@ -309,7 +309,13 @@ def build_books(rng: random.Random) -> tuple[list[dict[str, Any]], dict[str, Any
         add("Lanterns Over Kesh (Large Print)", "Priya Raman", "scifi", 2020, format="Paperback"),
     ]
     no_author = add("The Quiet Engine", None, "thriller", 2016)
-    store_only = add("Harbor of Glass", None, "mystery", 2014, store="Rowan Pike (Author)")
+    store_only = add(
+        "Harbor of Glass",
+        None,
+        "mystery",
+        2014,
+        store="Ada Moss (Illustrator), Rowan Pike (Author)",
+    )
     json_strings = add("The Winter Station", "Tess Arden", "thriller", 2017, json_strings=True)
     images_dict = add("A Season of Letters", "Lena Strand", "romance", 2018, images_as_dict=True)
     pub_date_key = add("Northern Promise", "Omar Haddad", "romance", 2010, publication_date=True)
@@ -318,6 +324,31 @@ def build_books(rng: random.Random) -> tuple[list[dict[str, Any]], dict[str, Any
     too_short = add("Pip the Little Fox", "Hugo Brenner", "literary", 2015, pages=32)
     cookbook = add("Weeknight Baking", "Signe Lund", "cookbook", 2018)
     no_categories = add("The Painted Tower", "Malik Carver", "", 2011)
+    untitled = add("Untitled Record", "Malik Carver", "literary", 2014, empty_title=True)
+    # F1: Kindle and audio editions live in meta_Books; Kindle ones have no ISBN but often point to
+    # the print edition through "Page numbers source ISBN"
+    kindle_of_print = add(
+        "The Salt Orchard",
+        "Daniel Okoro",
+        "literary",
+        2012,
+        isbn=False,
+        edition="kindle",
+        page_source=gr_pair[0]["isbn10"],
+    )
+    novella_isbn = isbn10(rng)  # the novella's print edition exists only in Goodreads
+    kindle_of_gr_only = add(
+        "Embers Between",
+        "Imogen Hale",
+        "sff",
+        2010,
+        isbn=False,
+        edition="kindle",
+        page_source=novella_isbn,
+    )
+    audiobook = add("Lanterns Over Kesh", "Priya Raman", "scifi", 2019, isbn=False, edition="audio")
+    isbn13_field = add("The Ninth Lighthouse", "Signe Lund", "mystery", 2012, isbn13_in_isbn10=True)
+    nameless = add("The Glass Atlas", "Sergio Ruzzier", "ya", 2016, author_without_name=True)
     for spec in specs:
         spec["planted"] = True
 
@@ -342,6 +373,7 @@ def build_books(rng: random.Random) -> tuple[list[dict[str, Any]], dict[str, Any
             "name": "The Ember Cycle",
             "volumes": {s["asin"]: s["gr_pos"] for s in series},
             "novella_only_in_goodreads": "Embers Between (The Ember Cycle, #1.5)",
+            "novella_isbn10": novella_isbn,
         },
         "boxsets": [boxset["asin"]],
         "editions_goodreads": [[b["asin"] for b in gr_pair]],
@@ -355,6 +387,13 @@ def build_books(rng: random.Random) -> tuple[list[dict[str, Any]], dict[str, Any
         "too_short": [too_short["asin"]],
         "out_of_slice": [cookbook["asin"]],
         "no_categories": [no_categories["asin"]],
+        "empty_title": [untitled["asin"]],
+        "kindle_editions": {
+            b["asin"]: b["page_source"] for b in (kindle_of_print, kindle_of_gr_only)
+        },
+        "audiobooks": [audiobook["asin"]],
+        "isbn13_in_isbn10_field": {isbn13_field["asin"]: isbn13(isbn13_field["isbn10"])},
+        "author_without_name": {nameless["asin"]: "Sergio Ruzzier"},
     }
     return specs, truth
 
@@ -369,12 +408,31 @@ def meta_record(spec: dict[str, Any], rng: random.Random) -> dict[str, Any]:
         "Item Weight": f"{round(rng.uniform(0.4, 2.2), 2)} pounds",
         "Dimensions": "6 x 1.2 x 9 inches",
     }
+    main_category, subtitle = "Books", f"{spec['format']} – {date_text(rng, spec['year'])}"
+    categories, store = spec["categories"], spec.get("store")
     if spec.get("publication_date"):
         details["Publisher"] = publisher
         details["Publication date"] = date_text(rng, spec["year"])
     if spec["isbn10"]:
         details["ISBN 10"] = spec["isbn10"]
         details["ISBN 13"] = f"978-{isbn13(spec['isbn10'])[3:]}"
+    if spec.get("isbn13_in_isbn10"):  # F3
+        details["ISBN 10"] = isbn13(spec["isbn10"])
+    if spec.get("edition") == "kindle":  # F1: real Kindle records carry no ISBN fields
+        details = {
+            "Publisher": publisher,
+            "Publication date": date_text(rng, spec["year"]),
+            "Language": "English",
+            "File size": f"{rng.randint(800, 4000)} KB",
+            "Print length": f"{spec['pages']} pages",
+            "Page numbers source ISBN": spec["page_source"],
+        }
+        main_category, subtitle = "Buy a Kindle", "Kindle Edition"
+        store = f"{spec['author']} (Author)   Format: Kindle Edition"
+    if spec.get("edition") == "audio":
+        details = {"Publisher": "Audible Studios", "Language": "English"}
+        main_category, subtitle = "Audible Audiobooks", "Audible Audiobook – Unabridged"
+        categories = ["Audible Books & Originals", *spec["categories"][1:3]]
     author: Any = None
     if spec["author"]:
         author = {
@@ -382,6 +440,8 @@ def meta_record(spec: dict[str, Any], rng: random.Random) -> dict[str, Any]:
             "name": spec["author"],
             "about": [f"{spec['author']} writes novels."],
         }
+    if spec.get("author_without_name"):  # F4: one real author dict had only an avatar
+        author = {"avatar": "https://example.invalid/avatar.jpg"}
     large = f"https://example.invalid/images/{spec['asin']}.jpg"
     images: Any = [
         {
@@ -406,9 +466,9 @@ def meta_record(spec: dict[str, Any], rng: random.Random) -> dict[str, Any]:
         "&quot;Unforgettable.&quot; &mdash; a reviewer",
     ]
     return {
-        "main_category": "Books",
-        "title": spec["title"],
-        "subtitle": f"{spec['format']} – {date_text(rng, spec['year'])}",
+        "main_category": main_category,
+        "title": "" if spec.get("empty_title") else spec["title"],
+        "subtitle": subtitle,
         "author": author,
         "average_rating": round(rng.uniform(3.2, 4.9), 1),
         "rating_number": rng.randint(5, 40_000),
@@ -417,8 +477,8 @@ def meta_record(spec: dict[str, Any], rng: random.Random) -> dict[str, Any]:
         "price": round(rng.uniform(6, 30), 2),
         "images": images,
         "videos": [],
-        "store": spec.get("store") or (f"{spec['author']} (Author)" if spec["author"] else None),
-        "categories": spec["categories"],
+        "store": store or (f"{spec['author']} (Author)" if spec["author"] else None),
+        "categories": categories,
         "details": details,
         "parent_asin": spec["asin"],
         "bought_together": None,
@@ -622,8 +682,9 @@ def build_goodreads(
         works[work]["best_book_id"] = rec["book_id"]
         matched[asin] = work
     novella = work_for("Embers Between", 2010)
+    novella_isbn = truth["series"]["novella_isbn10"]  # also the Kindle edition's source ISBN
     gr_book(
-        truth["series"]["novella_only_in_goodreads"], isbn10(rng), 2010, 96, novella, [series_id]
+        truth["series"]["novella_only_in_goodreads"], novella_isbn, 2010, 96, novella, [series_id]
     )
     box = by_asin[truth["boxsets"][0]]
     matched[box["asin"]] = work_for("The Ember Cycle Boxed Set", 2015)

@@ -92,8 +92,23 @@ def test_planted_metadata_cases(
     assert isinstance(meta[images_asin]["images"], dict)
     (no_author,) = truth["no_author"]
     assert meta[no_author]["author"] is None and meta[no_author]["store"] is None
-    for asin, name in truth["store_author"].items():
-        assert meta[asin]["author"] is None and meta[asin]["store"] == f"{name} (Author)"
+    for asin, name in truth["store_author"].items():  # F4: several credits, author not first
+        assert meta[asin]["author"] is None and f"{name} (Author)" in meta[asin]["store"]
+        assert not meta[asin]["store"].startswith(name)
+    for asin, page_source in truth["kindle_editions"].items():  # F1
+        kindle = meta[asin]
+        assert kindle["main_category"] == "Buy a Kindle" and asin.startswith("B0")
+        assert "ISBN 10" not in kindle["details"] and "ISBN 13" not in kindle["details"]
+        assert kindle["details"]["Page numbers source ISBN"] == page_source
+        assert "Format: Kindle Edition" in kindle["store"]
+    (audio,) = truth["audiobooks"]
+    assert meta[audio]["main_category"] == "Audible Audiobooks"
+    assert meta[audio]["categories"][0] == "Audible Books & Originals"
+    for asin, value in truth["isbn13_in_isbn10_field"].items():  # F3
+        assert meta[asin]["details"]["ISBN 10"] == value and len(value) == 13
+    for asin in truth["author_without_name"]:
+        assert meta[asin]["author"] == {"avatar": "https://example.invalid/avatar.jpg"}
+    assert meta[truth["empty_title"][0]]["title"] == ""
     (dated,) = truth["publication_date_key"]
     assert "Publication date" in meta[dated]["details"]
     blocklist = repo_config["data"]["title_blocklist"]
@@ -121,6 +136,7 @@ def test_series_boxset_and_editions(
         assert record["series"] == [truth["series"]["series_id"]]
     novella = SERIES_RE.search(truth["series"]["novella_only_in_goodreads"])
     assert novella and float(novella.group(2)) == 1.5
+    assert by_isbn[truth["series"]["novella_isbn10"]]["title"] == novella.string
 
     box_patterns = [re.compile(p, re.I) for p in repo_config["canonical"]["boxset_patterns"]]
     (box,) = truth["boxsets"]

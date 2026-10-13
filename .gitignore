@@ -13,3 +13,4 @@ local/
 artifacts/
 .cache/
 .ci-requirements.txt
+.colab-requirements.txt

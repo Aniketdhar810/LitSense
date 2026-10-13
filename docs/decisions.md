@@ -132,3 +132,178 @@ taken to keep Phase 0 moving; they are easy to reverse.
 - **Reason:** the full ML stack (torch with CUDA from PyPI) would add gigabytes per run for tests that do not
   import it yet. The subset grows when fast tests need more (the LightGCN tiny test will add CPU torch).
 - **Alternatives:** a third requirements file for CI (another source of pins).
+
+## 2026-10-12: Raw data inspection (`local/raw_sample/`)
+
+Numbers below are measured on the local samples (first N lines of each file), not on full files; they show
+what the parsers must handle, not final statistics. Full-file numbers come from the Colab runs.
+
+### D15. Goodreads files come from the UCSD mirror
+- **Decision:** new config key `sources.goodreads_base:
+  https://mcauleylab.ucsd.edu/public_datasets/gdrive/goodreads`; a file's URL is `<base>/<file name>`.
+- **Reason:** every Google Drive link on the dataset page (and the Drive file pages) returns 404. The mirror
+  serves all files over plain HTTPS with Range support: books 2.08 GB, series 28 MB, works 75 MB, spoilers
+  620 MB. `gdown` is therefore unnecessary; removing it from `requirements-ml.txt` is left for the Week-2
+  download work.
+- **Alternatives:** asking the user to upload the files to Drive by hand (CLAUDE.md §6.2 fallback).
+
+### D16. Local sample files
+- **Decision:** `local/raw_sample/` (gitignored by the existing `local/` rule) holds the first lines of four
+  files, streamed with `curl | gunzip | head` and re-gzipped with `gzip -n` under the original file names so
+  they can stand in for raw files: `Books.csv.gz` (200,000 lines = header + 199,999 ratings),
+  `meta_Books.jsonl.gz` (50,000), `Books.jsonl.gz` (50,000 reviews), `goodreads_reviews_spoiler.json.gz` (5,000).
+- **Finding that shapes `--sample` runs:** the files are not mutually consistent. The 5-core CSV and the
+  review file are both grouped by user in the same user order, so 60.2% of sampled review pairs are in the
+  ratings sample. The meta file is ordered differently: only 3.6% of sampled meta items appear in the ratings
+  sample (15.4% appear in the full 5-core). A useful local `data.meta` run therefore needs the full 5-core CSV
+  (0.14 GB) as its item list, not its first N lines.
+
+### Data format findings (F1–F12)
+- **F1. `meta_Books` contains Kindle editions and audiobooks.** `main_category` is "Buy a Kindle" for 6.6% of
+  meta records and "Audible Audiobooks" for 2.5%. Among sampled meta items that are in the 5-core, Kindle
+  editions carry **21.1% of the 5-core interactions** (audiobooks 0.4%). This contradicts PRD §17.1 ("Kindle
+  e-books live in a separate file"). Kindle records have `parent_asin` `B0…` (100%), no `ISBN 10`/`ISBN 13`
+  (0%), page counts under `Print length` (98%), `Publication date` instead of a dated `Publisher`, and
+  sometimes `Page numbers source ISBN` (17%), which points at the print edition. Consequences for
+  `data.canonical`: Kindle/print merges are common and mostly heuristic (no ISBN for the Goodreads join);
+  `FORMAT_KEYS` needs a Kindle/Audible format; `Page numbers source ISBN` can link a Kindle edition to its
+  print ISBN. **Needs a user decision before Week 3:** keep Kindle and audiobook editions (merged into their
+  works) or drop them.
+- **F2. `main_category` is not always "Books":** also "" (82), null (3), "Office Products", "Toys & Games",
+  "Musical Instruments". `categories` is empty for 8.9% of records; `categories[0]` can be
+  "Audible Books & Originals". Genre slicing on `categories[1]` must tolerate both.
+- **F3. `details["ISBN 10"]` sometimes holds a 13-digit value** (1,511 of 40,138; also a few 4/5/12-digit
+  values). `norm_isbn` must validate length and route 13-digit values to ISBN-13. `ISBN 13` has a dash in
+  84.7% of records.
+- **F4. Author sources disagree.** `author` is null for 28.5% of records (`store` is present for 95% of
+  those). One `author` dict has no `name` key. Where both exist, the `author.name` surname is missing from
+  `store` 5.3% of the time (for example an editor credited in `store`). `store` lists several contributors
+  for 25% of records ("Name (Author), Name (Illustrator)…"), sometimes with a trailing "Format: Kindle
+  Edition", and has no "(Role)" for 203 records. Parse `author.name` first, then the first "(Author)" in
+  `store`.
+- **F5. `description` mixes sections.** 51.4% of records have an empty `description` (`features` is
+  non-empty for 90.9%, so it is the main fallback). Non-empty descriptions often start with section labels:
+  "Review" (19% of records), "About the Author" (18%), "From Publishers Weekly", "From the Back Cover". The
+  §10.1 content text builder should drop author bios and editorial-review sections or prefer the blurb.
+- **F6. `images` entries usually have only `large` and `variant`** (97%); `thumb`/`hi_res` appear in 30
+  records. No dict-of-lists form seen.
+- **F7. No JSON-string encodings seen.** `details` is always a dict and `author` a dict or null in this
+  sample; the §7.2 `_maybe_json` handling stays as cheap insurance.
+- **F8. Dates.** The `Publisher` "(Month D, YYYY)" pattern gives a year for 92.0% of records; Kindle records
+  use `Publication date` (6.8%); `subtitle` often ends in a date ("Paperback – January 1, 2004"), a useful
+  third fallback. `subtitle` is null for 4.3% and is sometimes just "Kindle Edition" or "1st Edition".
+- **F9. 5-core CSV layout.** Ratings are floats ("5.0"), timestamps are milliseconds (sample range
+  1997-08-14 to 2023-03-20; full file 1996-08-17 to 2023-09-12). Rows are grouped by user and time-sorted
+  within a user, but users are not in alphabetical order. The first 200K lines are 10,210 complete user
+  histories (5 to 3,134 ratings each).
+- **F10. Reviews.** Timestamps are milliseconds. `images` entries are dicts of `small_image_url`,
+  `medium_image_url`, … (unused). `asin` differs from `parent_asin` in 0.3% of reviews. The raw file has
+  duplicate (user, parent_asin) pairs (11 in 50K) that the 5-core file does not. 37.9% of texts contain HTML
+  tags (mostly `<br />`) and 6.0% HTML entities; 6.8% are shorter than 20 characters.
+- **F11. Goodreads spoiler file.** `rating` is an int 0–5 where 0 means "no rating" (1.9% of reviews);
+  `timestamp` is a date string ("2017-08-30"), not milliseconds; `review_sentences` is `[[int, str], …]` and
+  `has_spoiler == any(label)` holds. Spoiler sentences are rare (1.9% of sentences, 5.9% of reviews), which
+  supports the balanced sampling in §11.7. The file is grouped by user (52 users in the first 5,000 reviews),
+  so its head is not a representative sample.
+- **F12. Goodreads book records** (checked while planning, first 2,000 lines): every scalar is a string,
+  empty string for missing; `series` is a list of id strings; real series suffixes include "(Pluto's Snitch
+  #2)" (no comma) and "(Sun Wolf and Starhawk, #1-2)" (a range, correctly left unparsed by the §7.3 regex).
+  The tiny fixture's assumptions (D13) hold.
+
+## 2026-10-13: Week 2 (Phase 1 data: download, meta, Goodreads)
+
+### D17. Kindle and audiobook records are editions of the same work (user decision on F1)
+- **Decision:** keep Kindle and audiobook records from `meta_Books` and treat them as editions of the same
+  work. `data.meta` keeps and tags them (`edition_kind`: print, kindle, audio, unknown; Kindle records also
+  carry `page_source_isbn13`, the print ISBN from "Page numbers source ISBN"). `data.canonical` (Week 3)
+  merges them with print editions by ISBN when one is present (including the page-source ISBN), otherwise
+  by the title+author heuristic with the box-set and volume guards of CLAUDE.md §7.4.
+- **Reason:** user decision (2026-10-13). In the 50K-line sample Kindle editions carry 21% of 5-core
+  interactions overall and 68.5% of the "Mystery, Thriller & Suspense" interactions; dropping them would
+  remove most of some genres.
+- **Alternatives:** drop Kindle and audio records (PRD §17.1 assumed they were not in this file).
+
+### D18. Large sources are streamed from their URLs, never stored (user rule)
+- **Decision:** `meta_Books` (and in Week 3 the reviews; later the Goodreads spoiler file) are read with
+  `ml/data/stream.py`: bytes are gunzipped in memory and filtered line by line. The stage framework has a
+  `url:<source>` input type; `ctx.source()` returns the URL, or with `--sample` the same-named local head in
+  `project.local_raw_root` (now `./local/raw_sample`) when it exists, else the URL read for N lines. The
+  input's fingerprint identity is the URL (plus the local head's size and mtime in sample runs).
+- **Resilience:** a dropped connection resumes with an HTTP Range request from the exact compressed byte
+  reached, feeding the same decompressor (tested with a server that hangs up mid-file). A crashed process
+  cannot resume a gzip stream, so `data.meta` checkpoints its output every `data.stream.checkpoint_rows`
+  kept records into its work dir on Drive (`PartWriter`); a rerun re-streams from byte 0 but skips the
+  lines already processed without parsing them, and counters resume from the checkpoint (tested: output
+  and counts identical to an uninterrupted run). Every stream must end with a complete gzip trailer and
+  deliver exactly its Content-Length.
+- **Alternatives:** download then parse (needs about 11 GB of Colab disk per session for meta + reviews and
+  re-downloads after every restart).
+
+### D19. `data.download` keeps only the 5-core ratings, always whole
+- **Decision:** `data.download` fetches the 5-core CSV into `data/<v>/ratings_5core.csv.gz` on Drive (not
+  ephemeral raw disk), byte for byte, while checking the header, stars in {1..5} and millisecond
+  timestamps (`DataError` otherwise). It reads the whole file even with `--sample` (user OK), because every
+  filter keys on it and its first lines barely overlap the meta head (D16). fastText's model moves to Week 3
+  with `data.clean`; the Goodreads files are streamed by `data.goodreads`.
+- **Reason:** 0.14 GB, used by every later stage; keeping it on Drive avoids re-downloads after restarts.
+
+### D20. The Goodreads book graph is optional (user rule)
+- **Decision:** `data.use_goodreads_graph: false` by default. Off, `data.goodreads` makes no network request
+  and writes `gr_isbn_index.parquet` and `gr_series.parquet` with zero rows and their final schema, so
+  `data.canonical` has one code path. On, it streams the books, series and works files and keeps only
+  books whose ISBN-13 (Goodreads ISBN-13, or its ISBN-10 converted) matches a `books_raw` ISBN: print
+  ISBN-10/13 or a Kindle edition's page-source ISBN (user requirement). The user enables it after
+  `data.meta` has run on Colab.
+- **Consequence:** this departs from CLAUDE.md §1.5 (Goodreads ISBN join first, heuristics as fallback)
+  while the flag is off: series ids and positions then come only from Amazon title patterns (Week 3), so the
+  series guard and "continue series" cover fewer books.
+- **Spoiler file:** the Goodreads spoiler reviews (Phase 3) are streamed independently of this flag.
+
+### D21. Torch on Colab: use the preinstalled build (user decision; closes D2's open item)
+- **Decision:** never install torch on Colab. `make install-colab` installs `requirements-core.txt` and
+  `requirements-ml.txt` minus the `torch==` line; `notebooks/00_colab_setup.ipynb` calls it and prints the
+  torch version actually used. `requirements-ml.txt` keeps its torch pin for laptops and CI.
+
+### D22. `data.meta` details
+- **Prefilter:** `parent_asin` is read from the raw line (`json_str_field`) and only 5-core lines are
+  JSON-parsed. On the real 50K-line head this parses 7,707 of 50,000 lines; `parent_asin` extraction agreed
+  with full JSON parsing on every meta and review line.
+- **Parsing rules from F1–F8:** author = `author.name`, else the first "(Author)" in `store` with any
+  "Format: …" suffix removed, else its first credit; ISBNs are classified by shape, so a 13-digit "ISBN 10"
+  becomes the ISBN-13; pages come from any "N pages" value (Kindle `Print length` included); year from the
+  Publisher date, then `Publication date`, then the subtitle; the binding is a `details` key or, for about
+  a tenth of print books, the subtitle's first part ("Paperback – January 1, 1994"). With these rules the
+  real head has 1.0% `unknown` editions (10.4% before the subtitle fallback).
+- **Memory:** `books_raw.parquet` is written from the checkpoint parts one part at a time (duplicates
+  dropped across parts), and the category counts read back only four columns. On the sample it takes
+  about 2.4 KB per book on disk with zstd (D24), about 1.2 GB for the full 5-core, too much to hold as one
+  pandas table on Colab's ~12 GB.
+- **Columns beyond §7.2:** `subtitle`, `main_category`, `features` (kept apart from `description`, which
+  often holds author bios and editorial reviews, F5), `page_source_isbn13`, `format`, `edition_kind`,
+  `n_interactions`. Explicit pyarrow schemas fix column types even when a sample has only nulls.
+- **Outputs for the decision:** `category_counts.csv` adds Kindle and audio interaction columns;
+  `genre_slice_proposal.json` applies the §7.2 rule with its constants in config
+  (`data.genre_slice_rule: {min_slices: 2, max_slices: 3, target_multiple: 4}`).
+- **Stop:** the stage ends with a STOP message and `python -m ml.data.meta` reprints the report.
+  `require_genre_slices(cfg)` raises while `data.genre_slices` is empty; Week-3 stages call it first.
+- **Dependencies:** `gdown` removed from `requirements-ml.txt` (D15); `requests` added to the CI package
+  subset because `ml.data.stream` imports it.
+
+### D23. Tiny fixture additions
+- **Decision:** the fixture now plants a Kindle edition of a print book (page-source ISBN), a Kindle
+  edition whose print edition exists only in Goodreads (proves the page-source match), an audiobook, a
+  13-digit "ISBN 10", an author dict without `name`, a `store` whose author is not the first credit, and a
+  record with an empty title. Totals are unchanged (50 users, 80 books, 600 ratings).
+
+### D24. zstd for `books_raw.parquet`; `features` stays (user request, 2026-10-13)
+- **Decision:** `books_raw.parquet` and `data.meta`'s temporary checkpoint parts are written with zstd. On
+  the 50K-line sample `books_raw` shrinks from 24.5 MB (snappy, the default) to 17.1 MB (70%) with
+  identical content; about 1.2 GB instead of 1.7 GB at full scale.
+- **`features` checked, kept:** the user asked to drop `features` if it just duplicates `description`. On
+  the sample it does not: the two are never identical; `features` is contained in `description` for 1.5%
+  of books, both exist and differ for 76.4%, and `features` is the only text for 20.2% (`description`
+  empty). Spot checks show `features` is usually the publisher's blurb (back-cover copy) while
+  `description` mostly holds editorial reviews ("Review", "From Publishers Weekly") and author bios (F5).
+  The blurb is the spoiler-safe premise text Phase 3 needs, so the column stays unchanged.
+- **Alternatives:** drop `features` (loses the only text for one book in five); blank it where it is
+  contained in `description` (1.5% of rows; would push Phase 3 to the noisier review/bio text).
