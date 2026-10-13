@@ -28,6 +28,7 @@ REQUIRED_SECTIONS = (
     "llm",
     "eval",
 )
+STREAM_KEYS = ("chunk_bytes", "retries", "timeout_s", "checkpoint_rows")
 REGEX_LISTS = (
     "data.title_blocklist",
     "data.shipping_patterns",
@@ -139,4 +140,9 @@ def _check_data(data: Mapping[str, Any]) -> list[str]:
     strata = data["sparsity_buckets"]
     if strata[0][0] != 1 or any(b[0] != a[1] + 1 for a, b in zip(strata, strata[1:], strict=False)):
         problems.append("data.sparsity_buckets must be contiguous and start at 1")
+    if not isinstance(data["use_goodreads_graph"], bool):
+        problems.append("data.use_goodreads_graph must be true or false")
+    stream = data["stream"]
+    if any(not isinstance(stream[k], int | float) or stream[k] <= 0 for k in STREAM_KEYS):
+        problems.append(f"data.stream needs positive {', '.join(STREAM_KEYS)}")
     return problems

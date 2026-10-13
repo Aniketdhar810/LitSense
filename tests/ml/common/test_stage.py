@@ -362,6 +362,60 @@ def test_code_files_follow_project_imports_but_skip_plumbing(
     assert "ml/common/stage.py" not in files and "ml/common/manifest.py" not in files
 
 
+def test_url_inputs_resolve_to_urls_or_local_heads(tmp_config: dict[str, Any]) -> None:
+    cfg = tmp_config
+    meta_url = "https://example.invalid/data/meta_Books.jsonl.gz"
+    cfg["sources"]["meta_books"] = meta_url
+    gr_url = f"{cfg['sources']['goodreads_base']}/goodreads_books.json.gz"
+    reg = StageRegistry()
+    seen: list[tuple[str, str, str]] = []
+
+    @reg.stage(
+        "t.url", inputs=["url:meta_books", "url:goodreads_books.json.gz"], outputs=["data:a.txt"]
+    )
+    def read(ctx: StageContext) -> None:
+        seen.append(
+            (
+                ctx.source("url:meta_books"),
+                ctx.source("url:meta_books", full=True),
+                ctx.source("url:goodreads_books.json.gz"),
+            )
+        )
+        ctx.out("data:a.txt").write_text("x")
+
+    run_stage("t.url", cfg, registry=reg)
+    assert seen[-1] == (meta_url, meta_url, gr_url)
+
+    local = Path(cfg["project"]["local_raw_root"])
+    local.mkdir(parents=True)
+    (local / "meta_Books.jsonl.gz").write_text("head")
+    run_stage("t.url", cfg, registry=reg, sample=10)
+    assert seen[-1] == (str(local / "meta_Books.jsonl.gz"), meta_url, gr_url)  # no local GR copy
+    assert stage_status("t.url", cfg, registry=reg, sample=10) == "complete"
+    (local / "meta_Books.jsonl.gz").write_text(
+        "a longer head"
+    )  # the local copy is part of identity
+    assert stage_status("t.url", cfg, registry=reg, sample=10) == "stale"
+
+    assert stage_status("t.url", cfg, registry=reg) == "complete"
+    cfg["sources"]["meta_books"] = "https://example.invalid/v2/meta_Books.jsonl.gz"
+    assert stage_status("t.url", cfg, registry=reg) == "stale"
+
+
+def test_url_specs_are_input_only_and_have_no_path(tmp_config: dict[str, Any]) -> None:
+    reg = StageRegistry()
+    with pytest.raises(StageError, match="url is input-only"):
+        reg.stage("t.out", outputs=["url:meta_books"])(lambda ctx: None)
+    reg.stage("t.path", inputs=["url:meta_books"], outputs=["data:a.txt"])(
+        lambda ctx: ctx.path("url:meta_books")
+    )
+    with pytest.raises(StageError, match="read it with ctx.source"):
+        run_stage("t.path", tmp_config, registry=reg)
+    reg.stage("t.unknown", inputs=["url:nowhere"], outputs=["data:b.txt"])(lambda ctx: None)
+    with pytest.raises(StageError, match="no URL for source 'nowhere'"):
+        run_stage("t.unknown", tmp_config, registry=reg)
+
+
 def test_raw_filename_uses_url_basename(repo_config: dict[str, Any]) -> None:
     sources = repo_config["sources"]
     assert raw_filename(sources, "ratings_5core") == "Books.csv.gz"

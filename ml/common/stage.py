@@ -16,6 +16,10 @@ outputs into place only after the function returns, and the manifest is written 
 
 Path specs are ``namespace:relative/path``; a trailing ``/`` marks a directory output.
 
+* ``url:<key>`` (inputs only): a source streamed from its URL and never stored. ``<key>`` is a
+  ``sources`` entry or a Goodreads file name (``sources.goodreads_base`` + ``/`` + name). With
+  ``--sample``, ``ctx.source`` returns the same-named local copy under ``project.local_raw_root``
+  when it exists; its identity is the URL plus that copy's size and mtime.
 * ``raw:<key>``: a raw download. ``<key>`` is a ``sources`` entry (file = URL basename) or a
   file name, under ``project.raw_root`` (``project.local_raw_root`` with ``--sample``).
 * ``data:<rel>``, ``artifacts:<rel>``, ``results:<rel>``: the file
@@ -52,7 +56,7 @@ from ml.common.manifest import (
 )
 from ml.common.seed import set_global_seed
 
-NAMESPACES = ("raw", "data", "artifacts", "results")
+NAMESPACES = ("url", "raw", "data", "artifacts", "results")
 _PROJECT_PACKAGES = frozenset({"ml", "litsense_core"})
 # Plumbing that cannot change what a stage writes; hashing it would rerun everything on any edit.
 _FRAMEWORK_MODULES = frozenset(
@@ -101,6 +105,10 @@ class StageRegistry:
         for spec in (*st.inputs, *st.outputs):
             split_spec(spec)
         for out in st.outputs:
+            if split_spec(out)[0] == "url":
+                raise StageError(
+                    f"stage {st.name!r} declares url output {out!r}; url is input-only"
+                )
             other = self.producer(out)
             if other is not None:
                 raise StageError(
@@ -145,6 +153,16 @@ def split_spec(spec: str) -> tuple[str, str]:
     return ns, rel
 
 
+def source_url(sources: Mapping[str, Any], key: str) -> str:
+    """URL of streamed source ``key``: a ``sources`` URL entry or a Goodreads file name."""
+    value = sources.get(key)
+    if isinstance(value, str) and "://" in value:
+        return value
+    if key in sources.get("goodreads_files", []):
+        return f"{str(sources['goodreads_base']).rstrip('/')}/{key}"
+    raise StageError(f"no URL for source {key!r} in config sources")
+
+
 def raw_filename(sources: Mapping[str, Any], key: str) -> str:
     """File name of raw input ``key``: the URL basename for a ``sources`` entry, else ``key``."""
     value = sources.get(key)
@@ -161,6 +179,7 @@ class RunPaths:
     out_root: Path
     version: str
     sources: Mapping[str, Any]
+    sampling: bool = False
 
     @classmethod
     def from_config(cls, cfg: Mapping[str, Any], sample: int | None) -> "RunPaths":
@@ -174,14 +193,30 @@ class RunPaths:
             _repo_path(project[out_key]),
             str(project["data_version"]),
             cfg["sources"],
+            sample is not None,
         )
 
     def resolve(self, spec: str) -> Path:
         """Final location of ``spec``."""
         ns, rel = split_spec(spec)
+        if ns == "url":
+            raise StageError(f"{spec!r} is streamed, not stored; read it with ctx.source")
         if ns == "raw":
             return self.raw_dir / raw_filename(self.sources, rel)
         return self.out_root / ns / self.version / rel
+
+    def source(self, spec: str, *, full: bool = False) -> str:
+        """URL of a ``url:`` input, or its local copy in a ``--sample`` run (unless ``full``)."""
+        ns, key = split_spec(spec)
+        if ns != "url":
+            raise StageError(f"{spec!r} is not a url input")
+        url = source_url(self.sources, key)
+        local = self.local_copy(url)
+        return str(local) if self.sampling and not full and local.exists() else url
+
+    def local_copy(self, url: str) -> Path:
+        """Where a ``--sample`` run looks for a local head of ``url``."""
+        return self.raw_dir / PurePosixPath(urlparse(url).path).name
 
     def staged(self, stage_name: str, spec: str) -> Path:
         """Where ``ctx.out`` writes ``spec`` before it is moved into place."""
@@ -231,10 +266,17 @@ class StageContext:
         return config_get(self._cfg, key)
 
     def path(self, spec: str) -> Path:
-        """Location of a declared input."""
+        """Location of a declared stored input."""
         if spec not in self.stage.inputs:
             raise StageError(f"stage {self.stage.name!r} read undeclared input {spec!r}")
         return self._paths.resolve(spec)
+
+    def source(self, spec: str, *, full: bool = False) -> str:
+        """URL (or, with ``--sample``, local head) of a declared ``url:`` input. ``full=True``
+        always returns the URL, for stages that must read the whole file even in sample runs."""
+        if spec not in self.stage.inputs:
+            raise StageError(f"stage {self.stage.name!r} read undeclared input {spec!r}")
+        return self._paths.source(spec, full=full)
 
     def out(self, spec: str) -> Path:
         """Staging location to write a declared output to (parent directories created)."""
@@ -444,6 +486,13 @@ def _display_path(path: Path) -> str:
 
 
 def _input_id(spec: str, paths: RunPaths, registry: StageRegistry) -> str:
+    if split_spec(spec)[0] == "url":
+        url = paths.source(spec, full=True)
+        local = paths.local_copy(url)
+        if paths.sampling and local.exists():
+            stat = local.stat()
+            return f"{url};local size={stat.st_size};mtime_ns={stat.st_mtime_ns}"
+        return url
     producer = registry.producer(spec)
     location = paths.resolve(spec)
     if producer is not None:

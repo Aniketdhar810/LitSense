@@ -62,8 +62,17 @@ python -m ml.stages list
 python -m ml.stages run all --until eval.val
 ```
 
-Add `--sample N` to read only the first N lines of each raw file and write under `./local` instead of Google
-Drive; add `--force` to rerun a stage that is up to date. Stages arrive phase by phase (CLAUDE.md §17).
+Large sources (`meta_Books`, the reviews, the Goodreads graph) are streamed from their URLs and filtered on
+the fly; they are never stored. Add `--sample N` to read only the first N lines of each streamed source from
+`local/raw_sample/` (or the URL when no local copy exists) and write under `./local` instead of Google Drive;
+add `--force` to rerun a stage that is up to date. Stages arrive phase by phase (CLAUDE.md §17).
+
+```bash
+python -m ml.stages run all --until data.meta --sample 50000
+```
+
+On Colab, run `notebooks/00_colab_setup.ipynb` (mounts Drive, clones the repo, `make install-colab`, which
+keeps Colab's own torch) and then the numbered notebooks, which only call stages.
 
 ## For the backend
 
