@@ -17,6 +17,7 @@ import pandas as pd
 import pyarrow as pa
 import pyarrow.parquet as pq
 
+from ml.common.log import Progress
 from ml.common.stage import StageContext, stage
 from ml.data.parsing import (
     as_isbn13,
@@ -174,7 +175,10 @@ def build_goodreads(ctx: StageContext) -> None:
 
 def _lines(ctx: StageContext, spec: str, settings: StreamSettings) -> Iterable[str]:
     stats = StreamStats(ctx.source(spec))
-    yield from iter_lines(stats.source, settings, limit=ctx.sample, stats=stats)
+    progress = Progress(ctx.log, spec.removeprefix("url:"))
+    for line in iter_lines(stats.source, settings, limit=ctx.sample, stats=stats):
+        progress.update(stats.bytes_read, stats.size, f"; {stats.lines:,} lines")
+        yield line
     ctx.notes.setdefault("sources", {})[spec] = stats.as_note()
 
 

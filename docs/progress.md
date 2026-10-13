@@ -122,3 +122,24 @@
 
 ### Open issues
 1. After the slice choice: optionally enable `data.use_goodreads_graph` and run `data.goodreads` on Colab.
+
+## 2026-10-13: First Colab run and fixes
+
+### What happened
+- `data.download` ran on Colab in 23 s with the same counts as locally. `data.meta` was interrupted by the
+  user while streaming (no progress output; Colab's input box looked like a prompt). Colab runs Python 3.13,
+  where the `fasttext-wheel` pin had no wheel, so the pinned install could not complete.
+
+### Fixed (D25)
+- Progress lines every minute for long streams; notebook guidance about Colab's input box; `< /dev/null`.
+- `fasttext-wheel` replaced by `fasttext-predict==0.9.2.4` (cp311-cp313 wheels, no numpy dependency).
+- CI matrix gains Python 3.13.
+
+### Tests run
+- `pytest -m "not slow"`: 171 passed, 1 skipped (new: `tests/ml/common/test_log.py`).
+- Pin resolution with binary wheels only: cp311, cp312, cp313 all resolve (104 packages).
+
+### Next
+- Rerun `notebooks/01_data.ipynb` on Colab. Because `data.meta`'s code changed, its fingerprint changed
+  and the interrupted run's checkpoints are discarded: the stage starts the stream from the beginning.
+

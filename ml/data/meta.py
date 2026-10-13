@@ -25,6 +25,7 @@ import pyarrow.parquet as pq
 
 from ml.common.config import load_config
 from ml.common.errors import ConfigError
+from ml.common.log import Progress
 from ml.common.stage import RunPaths, StageContext, stage
 from ml.data.parsing import (
     DATE_RE,
@@ -283,7 +284,13 @@ def build_meta(ctx: StageContext) -> None:
     if writer.resume_lines:
         ctx.log.info("resuming after line %d from checkpoint", writer.resume_lines)
     lines = iter_lines(source, StreamSettings.from_config(stream), limit=ctx.sample, stats=stats)
+    progress = Progress(ctx.log, "meta_Books")
     for n, line in enumerate(lines, start=1):
+        progress.update(
+            stats.bytes_read,
+            stats.size,
+            f"; {n:,} lines, {writer.counters['meta_matched']:,} matched the 5-core",
+        )
         if n <= writer.resume_lines:
             continue
         asin = extract_parent_asin(line)
