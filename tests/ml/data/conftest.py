@@ -10,6 +10,8 @@ from typing import Any
 
 import pytest
 
+from ml.data.download import FASTTEXT_MAGIC
+
 
 @dataclass
 class FileServer:
@@ -81,7 +83,9 @@ def tiny_cfg(
     """A config whose sources are the tiny raw fixture served over HTTP, with small checkpoints."""
     for path in (tiny_dataset / "raw").iterdir():
         shutil.copy(path, file_server.root / path.name)
+    (file_server.root / "lid.176.ftz").write_bytes(FASTTEXT_MAGIC + b"fake model")
     tmp_config["sources"].update(
+        fasttext_lid=file_server.url("lid.176.ftz"),
         ratings_5core=file_server.url("Books.csv.gz"),
         meta_books=file_server.url("meta_Books.jsonl.gz"),
         reviews_books=file_server.url("Books.jsonl.gz"),

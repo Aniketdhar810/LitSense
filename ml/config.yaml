@@ -46,13 +46,20 @@ data:
 canonical:
   drop_boxsets: true
   fuzzy_threshold: 90           # rapidfuzz token_set_ratio on normalized titles
-  max_year_gap: 3
+  subset_guard_threshold: 90    # also token_sort_ratio: token_set is 100 for any word subset (D28)
+  max_year_gap: 3               # applied to fuzzy (non-identical) title matches only (D28)
   boxset_patterns: ['box(ed)? set', omnibus, complete series, complete collection,
                     collection set, 'books? \d+ ?(-|to|through) ?\d+', '\d+ ?books? set', trilogy set]
   edition_noise: [hardcover, paperback, mass market, large print, unabridged, abridged,
                   illustrated edition, anniversary edition, special edition, deluxe edition,
                   collector's edition, reprint, kindle edition, audio cd, library binding,
-                  a novel, a thriller, a mystery, a memoir]
+                  a novel, a thriller, a mystery, a memoir,
+                  us edition, uk edition, international edition, revised edition, new edition,
+                  reissue, movie tie-in, media tie-in, tie-in, mti]
+  # a subtitle after ':' is dropped from the matching key when it is marketing, not title (D28)
+  subtitle_noise_patterns: ['^an? [\w'' -]+ (novel|thriller|mystery|romance|memoir|story)$',
+                            'best ?sell', sensation, 'sunday times|new york times', book club,
+                            now a major, tiktok, 'from the (author|bestselling)', soon to be]
 
 models:
   lightgcn: {dim: 64, layers: 3, lr: 0.001, batch_size: 4096, max_epochs: 300,

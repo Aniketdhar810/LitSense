@@ -94,7 +94,7 @@ def test_parse_meta_variants() -> None:
 
 
 def test_stage_on_the_tiny_fixture(tiny_cfg: Config, tiny_dataset: Path) -> None:
-    assert run_all(tiny_cfg, until="data.meta") == ["data.download", "data.meta"]
+    assert run_all(tiny_cfg, until="data.meta") == ["data.download", "data.lid", "data.meta"]
     truth = json.loads((tiny_dataset / "truth.json").read_text(encoding="utf-8"))
     paths = RunPaths.from_config(tiny_cfg, None)
     table = pq.read_table(paths.resolve("data:books_raw.parquet"))
@@ -173,15 +173,14 @@ def test_proposal_rule() -> None:
 
 
 def test_require_genre_slices(repo_config: Config) -> None:
-    assert meta.require_genre_slices(repo_config) == [
+    assert meta.require_genre_slices(repo_config["data"]["genre_slices"]) == [
         "Literature & Fiction",
         "Mystery, Thriller & Suspense",
         "Science Fiction & Fantasy",
     ]  # the user's choice (D26)
-    cfg = copy.deepcopy(repo_config)
-    cfg["data"]["genre_slices"] = []
-    with pytest.raises(ConfigError, match="STOP: choose data.genre_slices"):
-        meta.require_genre_slices(cfg)
+    for unset in ([], None, [""]):
+        with pytest.raises(ConfigError, match="STOP: choose data.genre_slices"):
+            meta.require_genre_slices(unset)
 
 
 def test_stops_with_a_report(

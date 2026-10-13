@@ -248,9 +248,9 @@ STOP_MESSAGE = (
 )
 
 
-def require_genre_slices(cfg: Mapping[str, Any]) -> list[str]:
-    """Return ``data.genre_slices``; raise ConfigError while the user has not chosen them."""
-    slices = cfg["data"]["genre_slices"]
+def require_genre_slices(slices: Sequence[str] | None) -> list[str]:
+    """Return the ``data.genre_slices`` value; raise ConfigError while the user has not chosen
+    them."""
     if not slices or not all(isinstance(s, str) and s for s in slices):
         raise ConfigError(f"data.genre_slices is not set. {STOP_MESSAGE}")
     return list(slices)

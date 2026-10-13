@@ -60,3 +60,18 @@ def test_rejects_a_broken_contract(
     with pytest.raises(DataError, match=message):
         run_stage("data.download", tiny_cfg)
     assert not RunPaths.from_config(tiny_cfg, None).manifest("data.download").exists()
+
+
+def test_lid_model_is_kept(tiny_cfg: dict[str, Any], file_server: FileServer) -> None:
+    run_stage("data.lid", tiny_cfg, sample=5)  # always the whole file, even in sample runs
+    out = RunPaths.from_config(tiny_cfg, 5).resolve("data:lid.176.ftz")
+    assert out.read_bytes() == (file_server.root / "lid.176.ftz").read_bytes()
+    assert (
+        manifest(tiny_cfg, "data.lid", sample=5)["notes"]["counts"]["bytes"] == out.stat().st_size
+    )
+
+
+def test_lid_rejects_a_non_fasttext_file(tiny_cfg: dict[str, Any], file_server: FileServer) -> None:
+    (file_server.root / "lid.176.ftz").write_bytes(b"<html>not found</html>")
+    with pytest.raises(DataError, match="not a fastText model"):
+        run_stage("data.lid", tiny_cfg)

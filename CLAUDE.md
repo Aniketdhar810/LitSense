@@ -43,13 +43,14 @@ After each phase gate, write a short summary in `docs/progress.md`: the gate che
 
 ### 0.5 Current state and decisions that override this brief (read `context.md` first)
 
-`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D27, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
+`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D30, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
 
 - **Stage fingerprints (§7.0):** code part = the stage's module plus its transitive `ml`/`litsense_core` imports, not the repo-wide git SHA (D6). Input identity = the sha256 the producer recorded (D7).
 - **Large sources are streamed, never stored (§7.1, §7.5, D18):** `url:<source>` stage inputs; `ml/data/stream.py` (gunzip on the fly, HTTP Range resume, `PartWriter` checkpoints). `data.download` keeps only the 5-core CSV on Drive (D19). `--sample N` reads heads in `local/raw_sample/`.
 - **Goodreads graph is optional (§1.5, §7.3, D20):** `data.use_goodreads_graph: false` (default). When on, keep only Goodreads rows whose ISBN-13 matches `books_raw` (incl. Kindle page-source ISBNs). Files come from `sources.goodreads_base` (the Drive links are dead, D15).
 - **Kindle and audiobook records stay (F1, D17):** they are editions of the same work; `data.canonical` must merge them with print (ISBN incl. `page_source_isbn13`, else title+author heuristic with box-set/volume guards).
 - **Genre slices are set (D26):** Literature & Fiction; Mystery, Thriller & Suspense; Science Fiction & Fantasy.
+- **Canonicalization (§7.4, D28–D29):** merge all `books_raw` editions first, keep a work if any edition is in a slice; title merges also need `token_sort_ratio >= canonical.subset_guard_threshold`, the year gap applies only to non-identical titles, volume guard = both known and different or one unknown and the other ≥ 2; audit files live in `results/<v>/canonical/`. `data.lid` keeps `lid.176.ftz` (D30).
 - **Environment:** Colab runs Python 3.13; pins work on 3.11–3.13; `make install-colab` never installs torch (D21); fastText is `fasttext-predict` (D25). Notebooks are committed without outputs; CI enforces it (D27).
 
 ## 1. Project context
