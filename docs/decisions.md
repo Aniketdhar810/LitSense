@@ -307,3 +307,62 @@ what the parsers must handle, not final statistics. Full-file numbers come from 
   The blurb is the spoiler-safe premise text Phase 3 needs, so the column stays unchanged.
 - **Alternatives:** drop `features` (loses the only text for one book in five); blank it where it is
   contained in `description` (1.5% of rows; would push Phase 3 to the noisier review/bio text).
+
+## 2026-10-13: First Colab run of `notebooks/01_data.ipynb`
+
+What happened: `data.download` completed on Colab in 23 s (9,488,297 ratings, 776,370 users, 495,063
+items, the same counts as locally). `data.meta` was streaming normally (the traceback shows it inside
+`parse_meta`) when the cell was stopped: the stage printed nothing for minutes, and Colab's input box
+under the running `!` command looked like a prompt. The second traceback (`PosixPath ... '_str'`) was a
+second Ctrl+C landing in the staging cleanup; no manifest was written, so nothing downstream trusts the
+partial run. The run also showed that Colab now uses **Python 3.13**.
+
+### D25. Colab feedback and Python 3.13
+- **Progress output:** long streams (`data.meta`, `data.goodreads`) log a status line about once a minute:
+  GB done of the total, percent, MB/s, minutes left, lines and 5-core matches so far (`Progress` in
+  `ml/common/log.py`, which is framework plumbing and so outside stage fingerprints).
+- **Notebooks:** both now say that the empty box under a running `!` cell is Colab's input box, not a
+  question; run cells read stdin from `/dev/null` so nothing typed there reaches the process.
+- **fastText:** `fasttext-wheel==0.9.2` has no Python 3.13 wheel, so `make install-colab` could not
+  install the pin set on Colab (the stages then ran on Colab's preinstalled pandas/pyarrow/requests).
+  Replaced by `fasttext-predict==0.9.2.4`: the prediction-only fastText build (all that language ID in
+  `data.clean` needs), same `fasttext.load_model(...).predict(...)` API, wheels for cp311-cp313 on Linux
+  and Windows, and no numpy dependency, which also removes the numpy-2 `predict()` problem of D3. Checked
+  with the real `lid.176.ftz` model (English, Spanish and German sentences identified correctly).
+- **Pins:** the full core+ml set now resolves with binary wheels for cp311, cp312 and cp313 (104
+  packages each); CI tests 3.11, 3.12 and 3.13.
+- **Alternatives:** compiling `fasttext` from source on every Colab session; pinning Colab to an older
+  runtime (not offered for free accounts).
+
+## 2026-10-13: Genre slices and repository hygiene
+
+### D26. Genre slices: Literature & Fiction; Mystery, Thriller & Suspense; Science Fiction & Fantasy
+- **Decision (user):** `data.genre_slices: [Literature & Fiction, 'Mystery, Thriller & Suspense',
+  Science Fiction & Fantasy]` (values of `categories[1]`).
+- **Evidence (full Colab run of `data.meta`, 2026-10-13, 446 s):** 4,448,181 meta lines; all 495,063
+  5-core items found; 13,408 dropped by the title blocklist and 27,647 by `min_pages`; 454,008 books in
+  `books_raw`. 5-core interactions per allowlisted category: Literature & Fiction 2,143,678 (24.6%, 98,546
+  books, 30.9% Kindle); Mystery, Thriller & Suspense 2,064,657 (23.7%, 56,335 books, 70.6% Kindle); Teen &
+  Young Adult 383,164 (4.4%); Science Fiction & Fantasy 202,160 (2.3%, 12,939 books); Romance 122,661 (1.4%).
+- **Reason:** the §7.2 rule proposed the first two (4,208,335 interactions, threshold 1,000,000). The user
+  added Science Fiction & Fantasy (total 4,410,495) because the PRD's demo and persona examples are mostly
+  SF and fantasy; without the slice those books would not exist in the catalogue.
+- **To watch in Week 3:** SF & Fantasy is small (2.3%); the EDA reports the genre mix after k-core and
+  sizing to show how much of it survives. Amazon's `categories[1]` is not always the literary genre (in the
+  sample, "The Handmaid's Tale" is under Politics & Social Sciences and Harry Potter under Children's Books),
+  so some well-known fiction falls outside the slices; the title lookups at the gate check this.
+- **Alternatives:** the two proposed slices only; adding Teen & Young Adult (larger than SF & Fantasy but
+  further from the demo examples).
+
+### D27. Notebooks are committed without outputs
+- **Decision:** `tests/test_notebooks.py` fails CI if any notebook in `notebooks/` has cell outputs or
+  execution counts (no new dependency; checked against the Colab-saved notebook, which it rejects). The user
+  will not use Colab's "Save in GitHub" again.
+- **Why:** Colab's "Save in GitHub" committed three executed copies of `01_data.ipynb` (with outputs) to
+  `claude/litsense-week2-data`. Outputs belong on Drive and in `results/`, not in git (rule 0.2.11).
+- **Branch cleanup:** the Colab fix `7b3fc9e` missed PR #3's merge; it was cherry-picked onto a fresh branch
+  from `main` (`claude/litsense-week2-colab-fixes`) without the three Colab commits, and
+  `claude/litsense-week2-data` was deleted once nothing on it was needed.
+- **Alternatives:** an `nbstripout` pre-commit hook (a new dependency, and hooks do not run when Colab
+  commits directly).
+

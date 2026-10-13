@@ -173,11 +173,15 @@ def test_proposal_rule() -> None:
 
 
 def test_require_genre_slices(repo_config: Config) -> None:
+    assert meta.require_genre_slices(repo_config) == [
+        "Literature & Fiction",
+        "Mystery, Thriller & Suspense",
+        "Science Fiction & Fantasy",
+    ]  # the user's choice (D26)
     cfg = copy.deepcopy(repo_config)
+    cfg["data"]["genre_slices"] = []
     with pytest.raises(ConfigError, match="STOP: choose data.genre_slices"):
         meta.require_genre_slices(cfg)
-    cfg["data"]["genre_slices"] = ["Romance"]
-    assert meta.require_genre_slices(cfg) == ["Romance"]
 
 
 def test_stops_with_a_report(
@@ -240,3 +244,26 @@ def test_resumes_after_a_crash(
         == read_manifest(clean_paths.manifest("data.meta"))["notes"]["counts"]
     )
     assert not paths.work_dir("data.meta").exists()
+
+
+def test_find_titles(
+    tiny_cfg: Config, tiny_dataset: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    run_all(tiny_cfg, until="data.meta")
+    truth = json.loads((tiny_dataset / "truth.json").read_text(encoding="utf-8"))
+    books = pd.read_parquet(RunPaths.from_config(tiny_cfg, None).resolve("data:books_raw.parquet"))
+    found = meta.find_titles(books, ["salt orchard", "No Such Book"])
+    salt = found[found["query"] == "salt orchard"]
+    expected = {*truth["editions_goodreads"][0], *truth["kindle_editions"]} - {
+        a for a, src in truth["kindle_editions"].items() if src == truth["series"]["novella_isbn10"]
+    }
+    assert set(salt["parent_asin"]) == expected  # hardcover, paperback and Kindle editions
+    assert list(salt["n_interactions"]) == sorted(salt["n_interactions"], reverse=True)
+    assert set(salt["category"]) == {"Literature & Fiction"}
+    missing = found[found["query"] == "No Such Book"]
+    assert len(missing) == 1 and missing["n_interactions"].iloc[0] == 0
+
+    config_file = tiny_dataset.parent / "find_config.yaml"
+    config_file.write_text(yaml.safe_dump(tiny_cfg), encoding="utf-8")
+    assert meta.main(["--config", str(config_file), "--find", "Salt Orchard"]) == 0
+    assert "'Salt Orchard':" in capsys.readouterr().out
