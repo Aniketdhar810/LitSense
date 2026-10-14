@@ -147,27 +147,42 @@ def build_reviews(ctx: StageContext) -> None:
     source = ctx.source("url:reviews_books")
     stats = StreamStats(source)
     writer = PartWriter(ctx.work_dir, every=int(stream["checkpoint_rows"]))
-    if writer.resume_lines:
-        ctx.log.info("resuming after line %d from checkpoint", writer.resume_lines)
-    lines = iter_lines(source, StreamSettings.from_config(stream), limit=ctx.sample, stats=stats)
-    progress = Progress(ctx.log, "reviews")
-    for n, line in enumerate(lines, start=1):
-        progress.update(
-            stats.bytes_read, stats.size, f"; {n:,} lines, {writer.counters['matched']:,} matched"
+    if writer.rolled_back is not None:
+        ctx.log.warning(
+            "checkpoint parts were missing (Drive lost them); rolled back from %d parts to the "
+            "last good checkpoint at line %d",
+            writer.rolled_back,
+            writer.resume_lines,
         )
-        if n <= writer.resume_lines:
-            continue
-        asin = extract_parent_asin(line)
-        user = json_str_field(line, "user_id", last=True)
-        if asin is not None and user is not None and pair_key(user, asin) in pairs:
-            writer.counters["matched"] += 1
-            writer.add(review_row(json.loads(line), kept[asin]))
-        writer.checkpoint(n)
-
-    counts = write_reviews(writer.close(stats.lines), ctx.out("data:reviews_raw.parquet"))
-    ctx.count("review_lines_read", stats.lines)
+    if writer.finished:
+        ctx.log.info("stream already finished (%d lines); deduplicating only", writer.resume_lines)
+    elif writer.resume_lines:
+        ctx.log.info("resuming after line %d from checkpoint", writer.resume_lines)
+    if not writer.finished:
+        settings = StreamSettings.from_config(stream)
+        lines = iter_lines(source, settings, limit=ctx.sample, stats=stats)
+        progress = Progress(ctx.log, "reviews")
+        for n, line in enumerate(lines, start=1):
+            progress.update(
+                stats.bytes_read,
+                stats.size,
+                f"; {n:,} lines, {writer.counters['matched']:,} matched",
+            )
+            if n <= writer.resume_lines:
+                continue
+            asin = extract_parent_asin(line)
+            user = json_str_field(line, "user_id", last=True)
+            if asin is not None and user is not None and pair_key(user, asin) in pairs:
+                writer.counters["matched"] += 1
+                writer.add(review_row(json.loads(line), kept[asin]))
+            writer.checkpoint(n)
+    n_pairs = len(pairs)
+    del pairs  # about 0.6 GB on the full run; the dedup below needs the memory
+    parts = writer.close(stats.lines if not writer.finished else writer.resume_lines)
+    counts = write_reviews(parts, ctx.out("data:reviews_raw.parquet"))
+    ctx.count("review_lines_read", writer.resume_lines)
     ctx.count("reviews_matched", writer.counters["matched"])
     for key, value in counts.items():
         ctx.count(key, value)
-    ctx.count("pairs_without_review", len(pairs) - counts["pairs_with_review"])
+    ctx.count("pairs_without_review", n_pairs - counts["pairs_with_review"])
     ctx.notes["source"] = stats.as_note()

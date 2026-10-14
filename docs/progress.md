@@ -291,3 +291,10 @@
 - Next: ONE Colab run of `run all --until data.eda`; then record sizing f, split stats and the slice
   mix, and close the Week 3 gate (registry hash).
 
+## 2026-10-14: Colab `data.reviews` failure, checkpoint fix (D37)
+
+- A first Colab run streamed all reviews and stopped; the rerun failed because Drive had lost
+  `part-00089.parquet` while keeping `progress.json`. `PartWriter` now validates parts, rolls back to the
+  last good one, and marks finished streams. Tests: lost part, old-format checkpoint, finished stream.
+  `pytest -m "not slow"`: 257 passed, 1 skipped.
+
