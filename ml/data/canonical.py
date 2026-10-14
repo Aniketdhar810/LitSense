@@ -3,7 +3,8 @@
 Every ``books_raw`` edition (print, Kindle, audio) is mapped to one work, never merging different
 works, different volumes, or a box set with a volume. Merges come from, in order:
 
-1. ``isbn``: two parent_asins with the same ISBN-13 (ISBN-10s converted);
+1. ``isbn``: two parent_asins with the same ISBN-13 (ISBN-10s converted) and the same author, or
+   an author missing on one side (D31);
 2. ``page_source``: a Kindle edition whose "Page numbers source ISBN" is a print edition's ISBN
    (same author, or an author missing on one side; F1, D17);
 3. ``goodreads``: the same Goodreads work id (only with ``data.use_goodreads_graph``);
@@ -187,16 +188,20 @@ def volume_conflict(a: float | None, b: float | None) -> bool:
 
 def isbn_unions(books: pd.DataFrame, works: Works, akeys: Sequence[str | None]) -> None:
     """``isbn`` and ``page_source`` merges (box sets excluded by the caller via ``keys``)."""
+
+    def same_author(i: int, j: int) -> bool:  # unknown on either side counts as a match
+        return not akeys[i] or not akeys[j] or akeys[i] == akeys[j]
+
     first_by_isbn: dict[str, int] = {}
     for i, key in enumerate(books["isbn_key"]):
         if key:
-            if key in first_by_isbn:
-                works.union(first_by_isbn[key], i, "isbn")
-            else:
+            if key not in first_by_isbn:
                 first_by_isbn[key] = i
+            elif same_author(first_by_isbn[key], i):  # Amazon reuses some ISBNs (audit G018)
+                works.union(first_by_isbn[key], i, "isbn")
     for i, source in enumerate(books["page_source_isbn13"]):
         j = first_by_isbn.get(source) if source else None
-        if j is not None and (not akeys[i] or not akeys[j] or akeys[i] == akeys[j]):
+        if j is not None and same_author(i, j):
             works.union(j, i, "page_source")
 
 

@@ -216,3 +216,34 @@
 - [ ] User reviews `results/v0/canonical/merge_audit.csv`; merge precision recorded in D28
 - Then: `data.reviews`, `data.clean`, `data.kcore_split`, `data.eda`, registry hash.
 
+
+## 2026-10-14: `data.canonical` full Colab run and merge audit (first pass)
+
+### Full Colab run (main after PR #6; output pasted by the user)
+- Upstream stages were up to date; `data.canonical` took 193.9 s.
+- 454,008 editions became 383,360 works (50,383 with 2 or more editions); 2,948 box sets.
+- Merge edges: isbn 705, page_source 2,370, title 67,573.
+- Kept 131,081 works, 170,864 editions, 4,497,594 interactions. Rule A rescued 4,071 editions and
+  111,155 interactions.
+- Kept works by primary slice:
+  - Literature & Fiction: 77,539 works, 2,202,974 interactions.
+  - Mystery, Thriller & Suspense: 42,862 works, 2,079,937 interactions.
+  - Science Fiction & Fantasy: 10,680 works, 214,683 interactions.
+- Near misses by reason: below_threshold 38,325, subset_guard 35,644, volume 8,784, year 3,448.
+
+### Audit (334 rows)
+- My first pass, for the user to confirm: 97/100 merged works correct; 44/50 not-merged pairs correct.
+- Wrong merges:
+  - G018: shared-ISBN data error (fixed, D31).
+  - G054: sequel at `token_sort` exactly 90.
+  - G004: a two-in-one "Animal Farm: 1984" edition (debatable).
+- All 6 wrong non-merges were blocked by the subset guard (same work, subtitle on one side only).
+
+### Built
+- D31: author guard on shared-ISBN merges, plus a regression test. `pytest -m "not slow"`: 226 passed,
+  1 skipped (torch).
+- `context.md` handoff notes carried over (their commit had missed PR #6).
+
+### Next
+- The user returns the edited verdicts; rerun `data.canonical` on Colab; record precision in D28/D31; then
+  `data.reviews`.

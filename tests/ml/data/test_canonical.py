@@ -133,6 +133,17 @@ def test_kindle_page_source(repo_config: Config) -> None:
     assert roots.iloc[0] == roots.iloc[1] != roots.iloc[2]
 
 
+def test_shared_isbn_needs_the_same_author(repo_config: Config) -> None:
+    shared = "9781590173466"  # audit G018: Amazon gives a crafts book a novel's ISBN
+    roots = merged(
+        repo_config,
+        edition("The Long Ships", "Frans Gunnar Bengtsson", isbn13=shared),
+        edition("Log Cabin Variations", "Annies", isbn13=shared),
+        edition("The Long Ships (NYRB Classics)", None, isbn13=shared),  # unknown author: merges
+    )
+    assert roots.iloc[0] == roots.iloc[2] != roots.iloc[1]
+
+
 def test_goodreads_works_join_and_separate(repo_config: Config) -> None:
     a, b, c = (isbn10_to_13(i) for i in ("0000000019", "0000000027", "0000000035"))
     gr = pd.DataFrame(

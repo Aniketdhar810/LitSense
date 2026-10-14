@@ -439,3 +439,18 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Side effect on Colab:** this change and the new config validation (`ml/common/config.py`) are in the
   code fingerprints of `data.download` and `data.meta`, so both rerun once (about 8 minutes, mostly the
   `meta_Books` stream); `require_genre_slices` now takes the slice list.
+
+## 2026-10-14: Merge audit, first pass
+
+### D31. Shared-ISBN merges need the same author (user decision after the audit)
+- **Finding:** in the full-run `merge_audit.csv`, group G018 joined a crafts book (*Log Cabin
+  Variations*, author "Annies") to *The Long Ships* because Amazon lists both under one ISBN. The `isbn`
+  rule had no author check.
+- **Decision:** an `isbn` merge now applies the same rule as `page_source`: the authors must match unless
+  one is missing. No threshold changed. Regression test `test_shared_isbn_needs_the_same_author`.
+- **Not changed (user's choice):** the subset guard stays at 90, so G054 (a sequel merged at
+  `token_sort` exactly 90) stays a known false merge. No "Title" vs "Title: subtitle" rule, so the
+  same-work pairs blocked by the subset guard stay a known recall cost.
+- **Pending:** the user is editing the proposed verdicts (`local/merge_audit_review_draft.csv`; first
+  pass: 97/100 merged works correct, 44/50 not-merged pairs correct). The reviewed precision is recorded
+  here after `data.canonical` reruns with this fix and the user confirms.
