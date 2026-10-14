@@ -49,7 +49,7 @@ def merged(repo_config: Config, *rows: dict[str, Any], gr: pd.DataFrame | None =
     params = repo_config["canonical"]
     gr = gr if gr is not None else pd.DataFrame(columns=GR_INDEX_SCHEMA.names)
     books = canonical.prepare(pd.DataFrame(rows), TitleRules.from_config(params), gr)
-    works, _ = canonical.merge(books, params, np.random.default_rng(0))
+    works = canonical.merge(books, params, np.random.default_rng(0))[0]
     return pd.Series(works.roots(), index=[r["title"] for r in rows])
 
 
@@ -131,6 +131,122 @@ def test_kindle_page_source(repo_config: Config) -> None:
         ),
     )
     assert roots.iloc[0] == roots.iloc[1] != roots.iloc[2]
+
+
+AICKMAN = (
+    "Robert Aickman's strange stories are among the most unsettling in the language: a woman "
+    "visits a house where nothing is quite what it seems, a traveller is stranded in a town that "
+    "will not let him go, and ordinary lives tilt into the uncanny."
+)
+MISTBORN_1 = (
+    "For a thousand years the ash fell and no flowers bloomed. The Lord Ruler reigns with absolute "
+    "power, and a street thief named Vin is recruited by a crew planning an impossible heist."
+)
+MISTBORN_SERIES = (
+    "The complete guide to the cosmere: maps, art and essays covering every era of the saga, "
+    "from the Final Empire to the Wax and Wayne novels, with notes from the author."
+)
+
+
+def test_subtitle_rule_merges_a_bare_title_with_similar_blurbs(repo_config: Config) -> None:
+    roots = merged(
+        repo_config,
+        edition("Cold Hand in Mine", "Robert Aickman", features=AICKMAN, year=2014),
+        edition(
+            "Cold hand in mine: Strange stories",
+            "Robert Aickman",
+            description=AICKMAN.replace("language", "English language"),
+            year=1975,
+        ),
+    )
+    assert same_work(roots)
+
+
+def test_subtitle_rule_needs_similar_blurbs(repo_config: Config) -> None:
+    roots = merged(
+        repo_config,
+        edition("Mistborn", "Brandon Sanderson", description=MISTBORN_SERIES),
+        edition("Mistborn: The Final Empire", "Brandon Sanderson", description=MISTBORN_1),
+    )
+    assert roots.nunique() == 2
+
+
+@pytest.mark.parametrize(
+    ("bare", "long", "blurb_bare", "blurb_long"),
+    [
+        (
+            ("Cold Hand in Mine", "Robert Aickman"),
+            ("Cold Hand in Mine: Stories", "R Aickman"),
+            1,
+            1,
+        ),
+        (
+            ("Cold Hand in Mine", "Robert Aickman"),
+            ("Cold Hand in Mine: Stories", "Robert Aickman"),
+            1,
+            0,
+        ),
+        (
+            ("Mistborn (Book 3)", "Brandon Sanderson"),
+            ("Mistborn: The Final Empire", "Brandon Sanderson"),
+            1,
+            1,
+        ),
+        (
+            ("Mistborn Box Set", "Brandon Sanderson"),
+            ("Mistborn Box Set: Books 1-3", "Brandon Sanderson"),
+            1,
+            1,
+        ),
+    ],
+    ids=["other_author", "empty_description", "volume_guard", "boxset"],
+)
+def test_subtitle_rule_guards(
+    repo_config: Config,
+    bare: tuple[str, str],
+    long: tuple[str, str],
+    blurb_bare: int,
+    blurb_long: int,
+) -> None:
+    roots = merged(
+        repo_config,
+        edition(*bare, description=AICKMAN if blurb_bare else None),
+        edition(*long, description=AICKMAN if blurb_long else ""),
+    )
+    assert roots.nunique() == 2
+
+
+def test_subtitle_merges_get_their_own_audit_section(repo_config: Config) -> None:
+    params = repo_config["canonical"]
+    rules = TitleRules.from_config(params)
+    rows = [
+        edition("Cold Hand in Mine", "Robert Aickman", features=AICKMAN),
+        edition("Cold hand in mine: Strange stories", "Robert Aickman", features=AICKMAN),
+        edition("The Wine-Dark Sea", "Robert Aickman"),
+    ]
+    books = canonical.prepare(
+        pd.DataFrame(rows), rules, pd.DataFrame(columns=GR_INDEX_SCHEMA.names)
+    )
+    rng = np.random.default_rng(0)
+    works, near, subtitles = canonical.merge(books, params, rng)
+    records = canonical.assign_works(books, works, [FICTION[1]], rules, drop_boxsets=True)
+    assert subtitles.counts["merged"] == 1 and len(subtitles.edges) == 1
+    audit = canonical.build_audit(books, records, near, subtitles, rng)
+    section = audit[audit["audit_kind"] == "subtitle_merge"]
+    assert list(section["audit_id"]) == ["S001", "S001"]
+    assert (section["merge_rule"] == "subtitle").all()
+    assert set(section["title"]) == {r["title"] for r in rows[:2]}
+
+
+def test_shared_isbn_needs_the_same_author(repo_config: Config) -> None:
+    shared = "9781590173466"  # audit G018: Amazon gives a crafts book a novel's ISBN
+    roots = merged(
+        repo_config,
+        edition("The Long Ships", "Frans Gunnar Bengtsson", isbn13=shared),
+        edition("Log Cabin Variations", "Annies", isbn13=shared),
+        edition("The Long Ships (NYRB Classics)", None, isbn13=shared),  # unknown author: merges
+    )
+    assert roots.iloc[0] == roots.iloc[2] != roots.iloc[1]
 
 
 def test_goodreads_works_join_and_separate(repo_config: Config) -> None:
@@ -237,7 +353,7 @@ def test_stage_on_the_tiny_fixture(
     assert report["kept"]["works"] == len(works)
     assert report["goodreads"]["enabled"] is use_goodreads
     assert list(audit.columns) == canonical.AUDIT_COLUMNS
-    assert set(audit["audit_kind"]) <= {"merged_work", "not_merged"}
+    assert set(audit["audit_kind"]) <= {"merged_work", "not_merged", "subtitle_merge"}
     assert audit["verdict"].isna().all()
     years = pd.read_csv(
         RunPaths.from_config(tiny_cfg, None).resolve("results:canonical/merge_audit.csv"),
