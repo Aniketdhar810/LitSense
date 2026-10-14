@@ -36,7 +36,8 @@ def blurb(book: Mapping[str, Any]) -> str:
 
 def item_text(book: Mapping[str, Any], encoder: TextEncoder, max_seq_length: int) -> str:
     """Header first, blurb truncated by tokens to fill the rest of ``max_seq_length``."""
-    genres = ", ".join(book.get("genres") or [])
+    genres = book.get("genres")
+    genres = ", ".join([] if genres is None else list(genres))  # a numpy array from parquet
     header = f"{book['title']}. By {book.get('author') or 'Unknown'}. Genres: {genres}."
     budget = max_seq_length - SPECIAL_TOKENS - encoder.count_tokens(header)
     text = blurb(book)

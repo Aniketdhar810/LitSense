@@ -73,6 +73,8 @@ def test_item_text_puts_metadata_first_and_never_reviews() -> None:  # s16.2 lea
     assert len(text.split()) <= 256 - content.SPECIAL_TOKENS
     assert "reviewer" not in text  # the blurb wins over the editorial description
     no_blurb = content.item_text({"title": "X", "genres": []}, StubEncoder(), 256)
+    from_parquet = {"title": "X", "genres": np.array(["Fantasy", "Mystery"])}  # Colab crash
+    assert "Genres: Fantasy, Mystery." in content.item_text(from_parquet, StubEncoder(), 256)
     assert no_blurb == "X. By Unknown. Genres: ."
 
 
