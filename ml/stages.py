@@ -26,6 +26,9 @@ STAGE_MODULES: tuple[str, ...] = (
     "ml.data.goodreads",
     "ml.data.canonical",
     "ml.data.reviews",
+    "ml.data.clean",
+    "ml.data.split",
+    "ml.data.eda",
 )
 
 

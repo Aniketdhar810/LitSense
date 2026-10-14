@@ -33,8 +33,9 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
 - Working mode (user, 2026-10-14): act autonomously. Commit, push, open PRs and merge my own PRs once CI
   is green; update context/progress/decisions myself. Stop only for Colab runs (give ONE cell plus the exact
   output to send back) or real decisions. Keep messages short.
-- `data.canonical` is done (run 3 accepted; D31-D33). `data.reviews` is built (D34). Next: build
-  `data.clean`, `data.kcore_split` and `data.eda`, then ONE Colab cell running `run all --until data.eda`.
+- `data.canonical` is done (run 3 accepted; D31-D33). `data.reviews`, `data.clean`, `data.kcore_split`
+  and `data.eda` are built (D34-D36). Next: ONE Colab run of `run all --until data.eda`; then record sizing
+  f, splits and the slice mix, copy `results/v0/eda` into the repo, add the registry entry, and close Week 3.
 
 ## Week 3 implementation notes (for the next session)
 

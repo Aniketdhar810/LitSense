@@ -279,3 +279,15 @@
 - Local sample: 194 reviews matched (the sample heads of meta and reviews barely overlap, D16).
 - Next: `data.clean`, `data.kcore_split`, `data.eda`; then one Colab run of the remaining Week 3 stages.
 
+## 2026-10-14: `data.clean`, `data.kcore_split`, `data.eda`
+
+- Built `ml/data/clean.py` (D35), `ml/nlp/aspect_seeds.py`, `ml/data/kcore.py` + `ml/data/split.py`
+  (stage `data.kcore_split`, D36) and `ml/data/eda.py` (stage `data.eda`). `01_data.ipynb` gets one
+  cell for all of them.
+- Tests: cleaning rules (with a stub language ID), k-core invariants, sizing reproducibility, split
+  chronology, one interaction per work with `has_text`, the tiny fixture end to end through `data.eda`,
+  and `id_map.json` stable across reruns. `pytest -m "not slow"`: 254 passed, 1 skipped.
+- Local sample: `data.clean` on the 194 sample reviews kept 183 as `text_ok`; 11 were too short.
+- Next: ONE Colab run of `run all --until data.eda`; then record sizing f, split stats and the slice
+  mix, and close the Week 3 gate (registry hash).
+

@@ -306,6 +306,14 @@ class StageContext:
         self.notes.setdefault("counts", {})[label] = int(n)
         self.log.info("%s: %d", label, n)
 
+    def upstream_notes(self, stage_name: str) -> dict[str, Any]:
+        """The notes of an upstream stage's complete manifest (its row counts, for attrition
+        tables). Declare one of that stage's outputs as an input so its changes rerun this one."""
+        manifest = read_manifest(self._paths.manifest(stage_name))
+        if not is_complete(manifest):
+            raise StageError(f"stage {stage_name!r} has no complete manifest")
+        return dict(manifest.get("notes", {}))
+
 
 def compute_fingerprint(
     st: Stage,
