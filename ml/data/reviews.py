@@ -158,7 +158,8 @@ def build_reviews(ctx: StageContext) -> None:
         ctx.log.info("stream already finished (%d lines); deduplicating only", writer.resume_lines)
     elif writer.resume_lines:
         ctx.log.info("resuming after line %d from checkpoint", writer.resume_lines)
-    if not writer.finished:
+    streamed = not writer.finished
+    if streamed:
         settings = StreamSettings.from_config(stream)
         lines = iter_lines(source, settings, limit=ctx.sample, stats=stats)
         progress = Progress(ctx.log, "reviews")
@@ -185,4 +186,5 @@ def build_reviews(ctx: StageContext) -> None:
     for key, value in counts.items():
         ctx.count(key, value)
     ctx.count("pairs_without_review", n_pairs - counts["pairs_with_review"])
-    ctx.notes["source"] = stats.as_note()
+    # a rerun that reused a finished stream has no stream statistics of its own
+    ctx.notes["source"] = stats.as_note() if streamed else {"reused_finished_stream": True}

@@ -562,13 +562,13 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **CI** installs matplotlib (`CI_ML_PACKAGES`) for the EDA test.
 
 ### D37. Checkpoints survive a part lost by Google Drive
-- **Finding (Colab, 2026-10-14):** a first `data.reviews` run streamed all 29,475,453 lines and stopped
+- **Finding (Colab, 2026-10-14):** a first `data.reviews` run streamed the whole file and stopped
   before finishing. On rerun, `progress.json` named 90 parts but `part-00089.parquet` was missing; the
   Drive FUSE mount had kept the later progress file and lost the earlier part.
 - **Decision:** `PartWriter` records each part's line offset and counters (`history`). On resume it
   checks every recorded part and rolls back to the last one that is present and readable. Old
   checkpoints without history restart from line 0. `close()` marks the stream `finished`, so a
-  rerun after a post-processing failure skips the 6.2 GB re-stream. `data.reviews` frees its pair set
+  rerun after a post-processing failure skips the re-stream. `data.reviews` frees its pair set
   before the dedup.
 - **Cost of this fix on Colab:** `ml/data/stream.py` is in the code fingerprints of `data.meta` and
   `data.reviews`, so both rerun once, and the reviews stream starts over.
