@@ -506,3 +506,25 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
   648 kept works joined.
 - The merged-work and not-merged sections of run 2 were not re-reviewed: the rules behind them changed
   only by D31 (fewer ISBN merges: 705 to 513) and now D33.
+
+## 2026-10-14: `data.canonical` closed; `data.reviews`
+
+- **Run 3 of `data.canonical` (after D33):** 454,008 editions became 384,579 works (50,127 with 2 or more
+  editions); kept 130,960 works and 4,499,455 interactions; the NYPD Red chain is gone from the largest
+  works. Near misses: number 6,852, year 1,496 (some pairs moved from year to number). Edition merging is
+  accepted with the audits recorded in D31-D33 (model-drafted verdicts, spot-checked by the user).
+
+### D34. `data.reviews` details
+- **Join:** a review is kept when its `(user_id, parent_asin)` is a 5-core rating of an edition whose work
+  is `kept`. Both ids are read from the raw line before JSON parsing; join on `parent_asin`, never `asin`
+  (F10). Timestamps must be milliseconds or the stage fails.
+- **Dedup order (§7.5 step 4):**
+  1. The latest review per `(user_id, canonical_id)`. This covers both the same review on two editions
+     and two editions that `data.canonical` merged.
+  2. Then one per `(user_id, text_hash)`. `text_hash` is a 16-hex sha1 of the text with tags, case and
+     punctuation removed. Empty texts are never text duplicates.
+- **No-review ratings** are not rows here. `data.kcore_split` builds interactions from the 5-core file and
+  sets `has_text` from this table; the stage logs `pairs_without_review`.
+- **Memory:** the pair set holds the kept works' 5-core pairs as strings (about 4.5M on the full run).
+  Parts are checkpointed every `data.stream.checkpoint_rows` matches, and dedup reads only the key
+  columns before rewriting the parts.

@@ -271,3 +271,11 @@
   rule; fixed with D33 plus a test. `pytest -m "not slow"`: 235 passed, 1 skipped.
 - Next: run 3 on Colab; check that the largest kept works are clean; then `data.reviews`.
 
+## 2026-10-14: `data.canonical` run 3 accepted; `data.reviews` built
+
+- Run 3 (D33 number guard): 384,579 works, 130,960 kept, 4,499,455 interactions; largest works clean.
+- `ml/data/reviews.py` (stage `data.reviews`, D34) with tests: text hash, the seconds-timestamp guard, the
+  two-step dedup, and the tiny fixture end to end. `pytest -m "not slow"`: 239 passed, 1 skipped.
+- Local sample: 194 reviews matched (the sample heads of meta and reviews barely overlap, D16).
+- Next: `data.clean`, `data.kcore_split`, `data.eda`; then one Colab run of the remaining Week 3 stages.
+

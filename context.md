@@ -33,9 +33,8 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
 - Working mode (user, 2026-10-14): act autonomously. Commit, push, open PRs and merge my own PRs once CI
   is green; update context/progress/decisions myself. Stop only for Colab runs (give ONE cell plus the exact
   output to send back) or real decisions. Keep messages short.
-- PR #7 merged (D31 ISBN author guard, D32 subtitle rule). Run 2 found NYPD Red 2/3/4/6 chained by the
-  title rule; D33 (number guard) fixes it. Next: Colab run 3 of `data.canonical`, check the largest kept
-  works, then `data.reviews`.
+- `data.canonical` is done (run 3 accepted; D31-D33). `data.reviews` is built (D34). Next: build
+  `data.clean`, `data.kcore_split` and `data.eda`, then ONE Colab cell running `run all --until data.eda`.
 
 ## Week 3 implementation notes (for the next session)
 
