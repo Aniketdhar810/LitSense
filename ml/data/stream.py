@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any, BinaryIO
 
 import pandas as pd
+import pyarrow as pa
+import pyarrow.parquet as pq
 import requests
 import urllib3
 
@@ -185,16 +187,26 @@ class PartWriter:
     """Checkpointed output for a long stream, kept in a stage's work dir.
 
     Records are buffered and written as numbered parquet parts; after each part a progress file
-    stores the number of input lines fully processed and the running counters. A restarted stage
-    builds a new ``PartWriter`` on the same work dir, skips the first ``resume_lines`` input lines
-    and continues; counters resume from the checkpoint, so totals match an uninterrupted run.
+    stores the number of input lines fully processed and the running counters, for that part and
+    every earlier one. A restarted stage builds a new ``PartWriter`` on the same work dir, skips
+    the first ``resume_lines`` input lines and continues; counters resume from the checkpoint, so
+    totals match an uninterrupted run.
+
+    On Google Drive a crash can lose a part file while ``progress.json`` survives (the FUSE mount
+    does not keep write order). Every recorded part is therefore checked on resume, and the writer
+    rolls back to the last part that is present and readable (``rolled_back`` says from where).
+    ``finished`` is True once ``close`` recorded a complete stream, so a stage can skip
+    re-streaming when only its post-processing failed.
     """
 
     work_dir: Path
     every: int
     counters: Counter[str] = field(default_factory=Counter, init=False)
     resume_lines: int = field(default=0, init=False)
+    finished: bool = field(default=False, init=False)
+    rolled_back: int | None = field(default=None, init=False)  # parts recorded before a rollback
     _parts: int = field(default=0, init=False)
+    _history: list[dict[str, Any]] = field(default_factory=list, init=False)
     _buffer: list[dict[str, Any]] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
@@ -203,9 +215,34 @@ class PartWriter:
             state = json.loads(progress.read_text(encoding="utf-8"))
             self.resume_lines, self._parts = state["lines"], state["parts"]
             self.counters = Counter(state["counters"])
+            self._history = list(state.get("history", []))
+            self.finished = bool(state.get("finished", False))
+            good = next((k for k in range(self._parts) if not self._readable(k)), self._parts)
+            if good < self._parts:
+                self._roll_back(good)
         for stray in self.work_dir.glob("part-*.parquet"):  # written after the last checkpoint
             if int(stray.stem.split("-")[1]) >= self._parts:
                 stray.unlink()
+
+    def _readable(self, k: int) -> bool:
+        try:
+            pq.read_metadata(self._part(k))
+        except (OSError, pa.ArrowInvalid):
+            return False
+        return True
+
+    def _roll_back(self, good: int) -> None:
+        """Keep parts ``0..good-1`` only. Without per-part history (checkpoints written before
+        it existed) the stream restarts from the beginning."""
+        self.rolled_back = self._parts
+        if len(self._history) < good or good == 0:
+            good = 0
+        self._parts = good
+        self.resume_lines = self._history[good - 1]["lines"] if good else 0
+        self.counters = Counter(self._history[good - 1]["counters"] if good else {})
+        self._history = self._history[:good]
+        self.finished = False
+        self._save()
 
     def add(self, record: dict[str, Any]) -> None:
         """Buffer one output record."""
@@ -217,10 +254,13 @@ class PartWriter:
             self._flush(lines_done)
 
     def close(self, lines_done: int) -> list[Path]:
-        """Flush the remainder; return the part files in input order. Read them one at a time:
-        together they can exceed Colab's memory (``books_raw`` is about 1.7 GB on disk)."""
+        """Flush the remainder, mark the stream finished, and return the part files in input
+        order. Read them one at a time: together they can exceed Colab's memory (``books_raw`` is
+        about 1.7 GB on disk)."""
         if self._buffer:
             self._flush(lines_done)
+        self.resume_lines, self.finished = max(self.resume_lines, lines_done), True
+        self._save()
         return [self._part(i) for i in range(self._parts)]
 
     def _flush(self, lines_done: int) -> None:
@@ -230,7 +270,18 @@ class PartWriter:
         os.replace(tmp, path)
         self._parts += 1
         self._buffer.clear()
-        state = {"lines": lines_done, "parts": self._parts, "counters": dict(self.counters)}
+        self.resume_lines = lines_done
+        self._history.append({"lines": lines_done, "counters": dict(self.counters)})
+        self._save()
+
+    def _save(self) -> None:
+        state = {
+            "lines": self.resume_lines,
+            "parts": self._parts,
+            "counters": dict(self.counters),
+            "finished": self.finished,
+            "history": self._history,
+        }
         write_json_atomic(self.work_dir / "progress.json", state)
 
     def _part(self, i: int) -> Path:

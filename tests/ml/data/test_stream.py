@@ -154,3 +154,49 @@ def test_part_writer_drops_parts_written_after_the_last_checkpoint(tmp_path: Pat
     assert not (tmp_path / "part-00001.parquet").exists()
     empty = PartWriter(tmp_path / "none", every=5)
     assert empty.close(0) == []
+
+
+def test_part_writer_rolls_back_to_the_last_part_on_disk(tmp_path: Path) -> None:
+    """Drive can lose a part while progress.json survives (Colab run, 2026-10-14)."""
+    columns = ["parent_asin", "title"]
+    clean = PartWriter(tmp_path / "clean", every=10)
+    (tmp_path / "clean").mkdir()
+    process(clean, LINES)
+    expected = read_parts(clean.close(len(LINES)), columns)
+
+    work = tmp_path / "lossy"
+    work.mkdir()
+    first = PartWriter(work, every=10)
+    process(first, LINES)
+    written = len(first.close(len(LINES)))
+    (work / "part-00002.parquet").unlink()  # lost by the Drive mount
+    resumed = PartWriter(work, every=10)
+    assert resumed.rolled_back == written and not resumed.finished
+    assert resumed.resume_lines == 39  # the end of part 1 (ids 20-38)
+    assert resumed.counters["odd"] == 19
+    assert not (work / "part-00003.parquet").exists()
+    process(resumed, LINES)
+    result = read_parts(resumed.close(len(LINES)), columns)
+    assert result.equals(expected) and resumed.counters == clean.counters
+
+
+def test_part_writer_without_history_restarts(tmp_path: Path) -> None:
+    writer = PartWriter(tmp_path, every=1)
+    writer.add({"parent_asin": "a", "title": "x"})
+    writer.checkpoint(1)
+    state = json.loads((tmp_path / "progress.json").read_text(encoding="utf-8"))
+    state["parts"] = 2  # an old-format checkpoint that names a part Drive never wrote
+    del state["history"]
+    (tmp_path / "progress.json").write_text(json.dumps(state), encoding="utf-8")
+    restarted = PartWriter(tmp_path, every=1)
+    assert restarted.rolled_back == 2 and restarted.resume_lines == 0
+    assert restarted.close(0) == []
+
+
+def test_finished_stream_is_not_streamed_again(tmp_path: Path) -> None:
+    writer = PartWriter(tmp_path, every=10)
+    process(writer, LINES)
+    parts = writer.close(len(LINES))
+    again = PartWriter(tmp_path, every=10)
+    assert again.finished and again.resume_lines == len(LINES)
+    assert again.close(again.resume_lines) == parts
