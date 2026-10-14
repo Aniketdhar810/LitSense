@@ -15,11 +15,3 @@ class DataError(ValueError):
 
 class StreamError(RuntimeError):
     """A streamed source could not be read completely (HTTP error, truncation, retries spent)."""
-
-
-class LeakageError(ValueError):
-    """An evaluation input is newer than its cutoff, or comes from another cutoff's artifact set."""
-
-
-class DegenerateScoresError(ValueError):
-    """A scorer returned a row whose finite scores all tie (the zero-user-vector bug, s2.2 #7)."""

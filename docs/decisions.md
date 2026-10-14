@@ -622,3 +622,9 @@ v0 stays as built, and Week 4 starts on it. Before v1:
 - **ALS:** `implicit` 0.7.3 on the (users x items) matrix with confidence alpha x binary; output
   shapes are asserted, and BLAS runs single-threaded during the fit.
 - **CI** installs scipy and implicit.
+
+### D41. Edits to shared modules rerun every stage that imports them
+- Adding `LeakageError` and `DegenerateScoresError` to `ml/common/errors.py` would have changed the code
+  fingerprint of every data stage (all import it) and rerun the whole data pipeline on Colab, including
+  the review stream. They live in `ml/eval/errors.py` instead, and `ml/common/errors.py` is back to the
+  bytes Colab ran. Rule: keep finished stages' import closures stable; put new shared code in new modules.

@@ -15,7 +15,7 @@ from typing import Literal
 import numpy as np
 import pandas as pd
 
-from ml.common.errors import LeakageError
+from ml.eval.errors import LeakageError
 
 Mode = Literal["val", "test"]
 FIT_SPLITS: dict[str, tuple[str, ...]] = {"val": ("train",), "test": ("train", "val")}

@@ -7,8 +7,8 @@ from typing import Protocol
 import numpy as np
 import pandas as pd
 
-from ml.common.errors import DegenerateScoresError, LeakageError
 from ml.eval.data import EvalData, FitData
+from ml.eval.errors import DegenerateScoresError, LeakageError
 from ml.eval.metrics import coverage, gini, ild, novelty, per_user_metrics, tail_share
 
 

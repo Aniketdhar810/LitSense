@@ -8,9 +8,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from ml.common.errors import DegenerateScoresError, LeakageError, StageError
+from ml.common.errors import StageError
 from ml.eval import bootstrap, metrics
 from ml.eval.data import FitData, build_eval_data, longtail_items, sparsity_bucket
+from ml.eval.errors import DegenerateScoresError, LeakageError
 from ml.eval.evaluator import evaluate, top_k
 from ml.eval.lock import acquire_test_lock
 from ml.eval.strata import by_sparsity, cold_item_rows, longtail_rows
