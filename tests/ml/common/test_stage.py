@@ -442,3 +442,23 @@ def test_cli_list_and_errors() -> None:
     assert "unknown stage" in unknown.stderr
     misuse = run_cli("run", "no.such.stage", "--until", "x")
     assert misuse.returncode == 2
+
+
+def test_a_truncated_output_makes_the_stage_stale(tmp_path: Path) -> None:
+    """Google Drive can keep an output's name but lose its bytes (D42)."""
+    registry = StageRegistry()
+
+    @registry.stage("demo.write", outputs=["data:out.txt"])
+    def write(ctx: StageContext) -> None:
+        ctx.out("data:out.txt").write_text("hello", encoding="utf-8")
+
+    cfg = {"project": {"seed": 1, "data_version": "v0", "drive_root": str(tmp_path / "d"),
+                       "raw_root": str(tmp_path / "r"), "local_root": str(tmp_path / "l"),
+                       "local_raw_root": str(tmp_path / "lr")}, "sources": {}}  # fmt: skip
+    assert run_stage("demo.write", cfg, registry=registry)
+    assert stage_status("demo.write", cfg, registry=registry) == "complete"
+    out = RunPaths.from_config(cfg, None).resolve("data:out.txt")
+    out.write_bytes(b"")
+    assert stage_status("demo.write", cfg, registry=registry) == "stale"
+    assert run_stage("demo.write", cfg, registry=registry)
+    assert out.read_text(encoding="utf-8") == "hello"

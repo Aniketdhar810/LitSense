@@ -628,3 +628,11 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   fingerprint of every data stage (all import it) and rerun the whole data pipeline on Colab, including
   the review stream. They live in `ml/eval/errors.py` instead, and `ml/common/errors.py` is back to the
   bytes Colab ran. Rule: keep finished stages' import closures stable; put new shared code in new modules.
+
+### D42. "Up to date" now also checks output sizes
+- **Finding:** on Colab, `reviews_clean.parquet` stayed on Drive as a 0-byte file while its manifest
+  said complete. The next stage that read it failed (`Parquet file size is 0 bytes`).
+- **Decision:** a stage is current only if every output exists with the byte size its manifest
+  recorded (directories: existence). Sizes are cheap; full hashes are not. A truncated output makes the
+  stage stale, so `run all` rebuilds it. `ml/common/stage.py` is framework code, outside stage
+  fingerprints, so this change reruns nothing by itself.
