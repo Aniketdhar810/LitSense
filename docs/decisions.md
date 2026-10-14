@@ -483,3 +483,26 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Alternatives:** TF-IDF cosine (needs scikit-learn in the stage; no clear gain at this sample size);
   `token_set_ratio` (similar separation, more lenient on subsets); merging without a blurb check (would
   join series names to book 1).
+
+## 2026-10-14: Run 2 of `data.canonical` (D31 + D32)
+
+### D33. Different numbers in fuzzy-matched titles block a title merge
+- **Finding (run 2):** one kept work held *NYPD Red 2, 3, 4* and *6* (17 editions, 2,649 interactions).
+  "nypd red 2" vs "nypd red 3" scores 90 on both fuzzy ratios, and `volume_number` does not read a
+  bare trailing number. The editions were chained by the `title` rule; the subtitle rule then added one
+  more NYPD Red 6 edition. The bug existed in run 1 too; the random merged-work audit did not sample it.
+- **Decision:** for non-identical normalized titles, the `title` rule refuses a merge when the titles'
+  number tokens differ (digits and multi-letter roman numerals, `number_tokens`). The near-miss reason is
+  `number`. Test `test_numbered_titles_never_merge`. Identical titles are unaffected.
+- **Effect on the 50K sample:** one title merge removed: two editions of an out-of-slice programming book
+  ("... iPhone SDK" vs "... iPhone 3.0 SDK"), which arguably are different editions anyway.
+- **Alternatives:** read a trailing number as a volume (would break titles like "Catch-22" and "1984");
+  raise the fuzzy thresholds (would lose real edition merges).
+
+### Run-2 audit (subtitle section; verdicts model-drafted, spot-checked by the user)
+- `subtitle_merge`: 30/30 sampled works correct (the same book with a marketing, genre or series
+  subtitle). Run-2 totals (from the user's Colab output): 1,603 subtitle merges from 10,850 candidates;
+  5,375 rejected for dissimilar blurbs, 555 for missing blurbs, 2,734 by the volume or work guard;
+  648 kept works joined.
+- The merged-work and not-merged sections of run 2 were not re-reviewed: the rules behind them changed
+  only by D31 (fewer ISBN merges: 705 to 513) and now D33.

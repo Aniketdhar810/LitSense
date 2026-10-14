@@ -99,6 +99,22 @@ def test_boxsets_never_merge(repo_config: Config) -> None:  # s16.2
     assert roots["The Mistborn Trilogy Box Set"] != roots["Mistborn: The Final Empire"].iloc[0]
 
 
+def test_numbered_titles_never_merge(repo_config: Config) -> None:  # D33, run-2 finding
+    roots = merged(
+        repo_config,
+        edition("NYPD Red 2", "James Patterson", year=2014),
+        edition("NYPD Red 2", "James Patterson", year=2015),
+        edition("NYPD Red 3", "James Patterson", year=2015),
+        edition("NYPD Red 4", "James Patterson", year=2016),
+        edition("Hell Divers II", "Nicholas Sansbury Smith"),
+        edition("Hell Divers III", "Nicholas Sansbury Smith"),
+        edition("Catch-22", "Joseph Heller"),
+        edition("Catch-22 (Kindle Edition)", "Joseph Heller"),
+    )
+    assert roots["NYPD Red 2"].nunique() == 1
+    assert roots.nunique() == 6  # NYPD Red 2 / 3 / 4, Hell Divers II / III, Catch-22
+
+
 def test_subset_guard_and_other_authors(repo_config: Config) -> None:
     roots = merged(
         repo_config,

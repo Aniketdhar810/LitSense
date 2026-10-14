@@ -263,3 +263,11 @@
 - Next: merge PR #7 once CI is green; the user reruns `data.canonical` on Colab (one cell), and the
   `subtitle_merge` section is reviewed the same way; then `data.reviews`.
 
+## 2026-10-14: Run 2 of `data.canonical`, number guard (D33)
+
+- Colab run 2 (after PR #7): 454,008 editions became 381,949 works; merge edges isbn 513, page_source
+  2,370, subtitle 1,603, title 67,573; kept 130,555 works and 4,499,855 interactions; 225 s.
+- Subtitle audit: 30/30 correct (model-drafted). Found NYPD Red 2/3/4/6 merged into one work by the title
+  rule; fixed with D33 plus a test. `pytest -m "not slow"`: 235 passed, 1 skipped.
+- Next: run 3 on Colab; check that the largest kept works are clean; then `data.reviews`.
+

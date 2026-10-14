@@ -106,6 +106,12 @@ def normalize_title(title: str, rules: TitleRules) -> str:
     return re.sub(r"^(?:the|a|an) ", "", text)
 
 
+def number_tokens(key: str) -> list[str]:
+    """Numbers in a matching key, digits and multi-letter roman numerals ("nypd red 2" -> ["2"]).
+    Two titles that differ in these are different books (D33)."""
+    return sorted(t for t in key.split() if t.isdigit() or (len(t) > 1 and t in ROMAN))
+
+
 def title_head(title: str, rules: TitleRules) -> str | None:
     """Matching key of the text before the first ':' of a title that has a subtitle ("Cold hand in
     mine: Strange stories" -> "cold hand in mine"); None for a title without one (D32)."""

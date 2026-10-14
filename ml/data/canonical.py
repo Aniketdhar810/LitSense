@@ -56,6 +56,7 @@ from ml.data.titles import (
     display_title,
     is_boxset,
     normalize_title,
+    number_tokens,
     series_from_title,
     series_key,
     title_head,
@@ -252,6 +253,8 @@ def title_unions(
             return "author"
         if volume_conflict(volumes[i], volumes[j]):
             return "volume"
+        if not identical and number_tokens(norms[i]) != number_tokens(norms[j]):
+            return "number"  # "nypd red 2" vs "nypd red 3" score 90 (D33)
         known = years[i] is not None and years[j] is not None
         if not identical and known and abs(years[i] - years[j]) > max_gap:
             return "year"
