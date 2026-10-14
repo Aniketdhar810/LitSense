@@ -33,9 +33,9 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
 - Working mode (user, 2026-10-14): act autonomously. Commit, push, open PRs and merge my own PRs once CI
   is green; update context/progress/decisions myself. Stop only for Colab runs (give ONE cell plus the exact
   output to send back) or real decisions. Keep messages short.
-- PR #7: D31 (shared-ISBN author guard) and D32 (subtitle rule with blurb check). The run-1 audit is
-  recorded (model-drafted verdicts). Next: the user reruns `data.canonical` on Colab; review its
-  `subtitle_merge` audit section; then `data.reviews`.
+- PR #7 merged (D31 ISBN author guard, D32 subtitle rule). Run 2 found NYPD Red 2/3/4/6 chained by the
+  title rule; D33 (number guard) fixes it. Next: Colab run 3 of `data.canonical`, check the largest kept
+  works, then `data.reviews`.
 
 ## Week 3 implementation notes (for the next session)
 
