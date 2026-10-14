@@ -449,8 +449,37 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Decision:** an `isbn` merge now applies the same rule as `page_source`: the authors must match unless
   one is missing. No threshold changed. Regression test `test_shared_isbn_needs_the_same_author`.
 - **Not changed (user's choice):** the subset guard stays at 90, so G054 (a sequel merged at
-  `token_sort` exactly 90) stays a known false merge. No "Title" vs "Title: subtitle" rule, so the
-  same-work pairs blocked by the subset guard stay a known recall cost.
-- **Pending:** the user is editing the proposed verdicts (`local/merge_audit_review_draft.csv`; first
-  pass: 97/100 merged works correct, 44/50 not-merged pairs correct). The reviewed precision is recorded
-  here after `data.canonical` reruns with this fix and the user confirms.
+  `token_sort` exactly 90) stays a known false merge.
+- **Audit of run 1 (verdicts model-drafted, spot-checked by the user; the user will spot-check
+  again later):** 97/100 merged works correct (wrong: G018 shared-ISBN data error, fixed here; G054 sequel
+  at the subset-guard boundary; G004 one two-in-one "Animal Farm: 1984" edition) and 44/50 not-merged
+  pairs correct (all 6 misses were same works blocked by the subset guard, which led to D32). File:
+  `results/v0/canonical/merge_audit_run1_reviewed.csv` (verdict + note columns).
+
+### D32. "Title" merges with "Title: subtitle" when the blurbs agree (user decision)
+- **Rule (`subtitle`, runs after every other rule):** an edition whose title has no subtitle joins an
+  edition whose title is that text plus ": subtitle" when all of these hold:
+  - the bare title's matching key equals the key of the other's text before the colon (`title_head`);
+  - the author key is the same (never missing);
+  - the volume guard passes and the two works hold no different Goodreads works;
+  - neither is a box set or omnibus;
+  - the blurbs are similar: `features`, else `description` (D24), first
+    `canonical.subtitle_description_chars` = 500 characters, lowercased, punctuation collapsed; rapidfuzz
+    `token_sort_ratio` >= `canonical.subtitle_description_threshold` = 70.
+  An empty blurb on either side means no merge.
+- **Why:** 6 of the 50 audited non-merges were the same work with a subtitle on one side ("Cold Hand in
+  Mine" vs "Cold hand in mine: Strange stories"). The subset guard blocks these by design, and the blurb
+  check stops a bare series name joining book 1 ("Mistborn" vs "Mistborn: The Final Empire").
+- **Threshold evidence (50K-line sample head; small, rough):** 27 same-work edition pairs and 534
+  different-work pairs by the same author. At 70, 41% of same-work pairs and 1.9% of different-work pairs
+  pass. At 60: 44% / 3.9%. 70 favours precision; the title-head condition is the main filter.
+- **Cost control:** at most 3 description comparisons per pair of works (most-rated editions first);
+  blurbs are read from `books_raw` only for candidate editions.
+- **Audit:** `merge_audit.csv` gains a `subtitle_merge` section: 30 random kept works joined only by
+  this rule (each subtitle edge joins two works the other rules kept apart), showing the two joining
+  editions with `merge_rule = subtitle` and the description similarity in `reason`. Pairs rejected for
+  dissimilar blurbs are near misses with reason `subtitle_description`. `canonical_report.json` has a
+  `subtitle_rule` block of counts by outcome.
+- **Alternatives:** TF-IDF cosine (needs scikit-learn in the stage; no clear gain at this sample size);
+  `token_set_ratio` (similar separation, more lenient on subsets); merging without a blurb check (would
+  join series names to book 1).

@@ -12,6 +12,7 @@ from ml.data.titles import (
     normalize_title,
     series_from_title,
     series_key,
+    title_head,
     volume_number,
 )
 
@@ -60,6 +61,14 @@ def test_normalize_title(rules: TitleRules, title: str, key: str) -> None:
 )
 def test_display_title_keeps_series_brackets(rules: TitleRules, title: str, shown: str) -> None:
     assert display_title(title, rules) == shown
+
+
+def test_title_head(rules: TitleRules) -> None:  # D32
+    assert title_head("Cold hand in mine: Strange stories", rules) == "cold hand in mine"
+    assert title_head("Mistborn: The Final Empire", rules) == "mistborn"
+    assert title_head("Thrones, Dominations (A Lord Peter Wimsey: Mystery)", rules) is None
+    assert title_head("Cold Hand in Mine", rules) is None
+    assert title_head("Trailing colon:", rules) is None
 
 
 def test_boxsets(rules: TitleRules) -> None:

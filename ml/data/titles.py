@@ -106,6 +106,15 @@ def normalize_title(title: str, rules: TitleRules) -> str:
     return re.sub(r"^(?:the|a|an) ", "", text)
 
 
+def title_head(title: str, rules: TitleRules) -> str | None:
+    """Matching key of the text before the first ':' of a title that has a subtitle ("Cold hand in
+    mine: Strange stories" -> "cold hand in mine"); None for a title without one (D32)."""
+    head, sep, tail = _PAREN_RE.sub(" ", _fold(title)).partition(":")
+    if not sep or not re.sub(r"[\W_]+", "", tail):
+        return None
+    return normalize_title(head, rules) or None
+
+
 def display_title(title: str, rules: TitleRules) -> str:
     """The title as shown in the app: format-only brackets and noise subtitles removed, series
     brackets and case kept. "Project Hail Mary: A Novel" -> "Project Hail Mary"."""

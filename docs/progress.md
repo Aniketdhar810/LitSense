@@ -247,3 +247,19 @@
 ### Next
 - The user returns the edited verdicts; rerun `data.canonical` on Colab; record precision in D28/D31; then
   `data.reviews`.
+
+## 2026-10-14: Subtitle rule (D32), audit recorded
+
+- `title_head` (titles.py), `subtitle_unions` plus blurb readers (canonical.py), `assign_works` (shared
+  glue), a `subtitle_merge` audit section and a `subtitle_rule` report block. Config:
+  `canonical.subtitle_description_threshold: 70`, `subtitle_description_chars: 500`.
+- Tests: Cold Hand in Mine merges; Mistborn vs Mistborn: The Final Empire with different blurbs does not;
+  guards for other author, empty description, volume and box set; audit section; `title_head`.
+  `pytest -m "not slow"`: 234 passed, 1 skipped (torch).
+- Sample run (50K head): subtitle rule: 6 candidates, 2 merged, 3 dissimilar blurbs, 1 blocked by the
+  volume or work guard.
+- Run-1 audit verdicts (model-drafted, spot-checked by the user) recorded in D31 and committed as
+  `results/v0/canonical/merge_audit_run1_reviewed.csv`.
+- Next: merge PR #7 once CI is green; the user reruns `data.canonical` on Colab (one cell), and the
+  `subtitle_merge` section is reviewed the same way; then `data.reviews`.
+

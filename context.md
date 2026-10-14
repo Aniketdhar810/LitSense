@@ -28,6 +28,15 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
 - **Then (Week 3 part 2):** `data.reviews`, `data.clean` (needs `ml/nlp/aspect_seeds.py` lexicons),
   `data.kcore_split`, `data.eda` (genre mix at every step: slices → works → k-core → sizing), registry hash.
 
+## Latest (2026-10-14)
+
+- Working mode (user, 2026-10-14): act autonomously. Commit, push, open PRs and merge my own PRs once CI
+  is green; update context/progress/decisions myself. Stop only for Colab runs (give ONE cell plus the exact
+  output to send back) or real decisions. Keep messages short.
+- PR #7: D31 (shared-ISBN author guard) and D32 (subtitle rule with blurb check). The run-1 audit is
+  recorded (model-drafted verdicts). Next: the user reruns `data.canonical` on Colab; review its
+  `subtitle_merge` audit section; then `data.reviews`.
+
 ## Week 3 implementation notes (for the next session)
 
 - `canonical.py`: `prepare` (keys) → `merge` (union-find `Works`; `isbn`, `page_source`, `goodreads`,

@@ -14,6 +14,12 @@ works, different volumes, or a box set with a volume. Merges come from, in order
    AND the same author key AND compatible volume numbers AND, for non-identical titles, a year gap
    of at most ``max_year_gap``. Two components with different Goodreads works or different known
    volumes are never joined.
+5. ``subtitle`` (D32): "Title" joins "Title: subtitle" when the bare title equals the other's text
+   before the colon, the author key is the same, the volume guard passes, neither is a box set,
+   and their blurbs (``features``, else ``description``) are similar (``token_sort_ratio`` on the
+   first ``subtitle_description_chars`` characters >= ``subtitle_description_threshold``). Without
+   a blurb on either side there is no merge. Runs last, so every such edge joins two works that the
+   other rules kept apart; ``merge_audit.csv`` samples them in its own section.
 
 All 454K editions are merged first; a work is kept when any of its editions sits in a genre slice
 (rule A, D28), so a Kindle edition filed under another category still counts. Box sets are dropped.
@@ -24,8 +30,10 @@ The audit files go to ``results:`` so they reach the repo (D28, user rule B).
 
 import argparse
 import json
+import re
 from collections import Counter
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +58,7 @@ from ml.data.titles import (
     normalize_title,
     series_from_title,
     series_key,
+    title_head,
     volume_number,
 )
 
@@ -95,7 +104,9 @@ CANONICAL_SCHEMA = pa.schema(
 )
 NEAR_MISS_FLOOR = 80  # s7.4 step 9: near-threshold non-merges are audited from this score
 NEAR_MISS_RESERVOIR = 2000  # near-miss pairs kept per reason for the audit (all are counted)
-AUDIT_GROUPS, AUDIT_NEAR_MISSES, AUDIT_MAX_MEMBERS = 100, 50, 15
+AUDIT_GROUPS, AUDIT_NEAR_MISSES, AUDIT_MAX_MEMBERS, AUDIT_SUBTITLE = 100, 50, 15, 30
+SUBTITLE_PAIRS_PER_WORKS = 3  # description comparisons tried per pair of works (most-rated first)
+Blurbs = Callable[[Sequence[int]], Mapping[int, str]]  # edition rows -> blurb text
 AUDIT_EDITION_COLUMNS = [
     "canonical_id", "parent_asin", "title", "author", "year", "edition_kind", "category",
     "n_interactions", "merge_rule",
@@ -175,6 +186,15 @@ class NearMisses:
             sample.append(pair)
         elif (j := int(self.rng.integers(self.counts[reason]))) < self.size:
             sample[j] = pair
+
+
+@dataclass
+class SubtitleMerges:
+    """What the ``subtitle`` rule did: its merge edges (two edition rows and their description
+    similarity) and counts of candidate pairs by outcome."""
+
+    edges: list[dict[str, Any]] = field(default_factory=list)
+    counts: Counter[str] = field(default_factory=Counter)
 
 
 def volume_conflict(a: float | None, b: float | None) -> bool:
@@ -294,6 +314,121 @@ def title_unions(
                 )
 
 
+def blurb_key(text: str | None, chars: int) -> str:
+    """Comparable start of a blurb: its first ``chars`` characters, lowercased, punctuation
+    collapsed to spaces."""
+    return " ".join(re.sub(r"[\W_]+", " ", (text or "")[:chars].lower()).split())
+
+
+def pick_blurb(features: Any, description: Any) -> str | None:
+    """The edition's blurb: ``features`` (usually the publisher's premise, D24), else
+    ``description``."""
+    for text in (features, description):
+        if isinstance(text, str) and text.strip():
+            return text
+    return None
+
+
+def frame_blurbs(books: pd.DataFrame) -> Blurbs:
+    """Blurbs read from ``books`` itself (its ``features``/``description`` columns, if any)."""
+
+    def read(rows: Sequence[int]) -> dict[int, str]:
+        texts = {}
+        for i in rows:
+            get = books.iloc[i].get
+            if text := pick_blurb(get("features"), get("description")):
+                texts[i] = text
+        return texts
+
+    return read
+
+
+def parquet_blurbs(path: Path, asins: Sequence[str]) -> Blurbs:
+    """Blurbs read from ``books_raw`` in batches, only for the requested editions (``asins`` is
+    the edition row -> parent_asin list)."""
+
+    def read(rows: Sequence[int]) -> dict[int, str]:
+        wanted = {asins[i]: i for i in rows}
+        texts: dict[int, str] = {}
+        parquet = pq.ParquetFile(path)
+        columns = ["parent_asin", "features", "description"]
+        for batch in parquet.iter_batches(columns=columns, batch_size=50_000):
+            values = (batch.column(c).to_pylist() for c in columns)
+            for asin, features, description in zip(*values, strict=True):
+                row = wanted.get(asin)
+                if row is not None and (text := pick_blurb(features, description)):
+                    texts[row] = text
+        return texts
+
+    return read
+
+
+def subtitle_unions(
+    books: pd.DataFrame,
+    works: Works,
+    params: Mapping[str, Any],
+    near: NearMisses,
+    blurbs: Blurbs,
+) -> SubtitleMerges:
+    """``subtitle`` merges (D32): an edition whose title has no subtitle joins an edition whose
+    title is that text plus ``: subtitle`` (same author key, volume guard, no box set) when their
+    blurbs are similar. Pairs with dissimilar blurbs go to ``near`` (reason
+    ``subtitle_description``)."""
+    threshold = float(params["subtitle_description_threshold"])
+    chars = int(params["subtitle_description_chars"])
+    norms, heads = books["norm_title"].tolist(), books["head"].tolist()
+    akeys, volumes, boxsets = (books[c].tolist() for c in ("author_key", "volume", "boxset"))
+    order = np.argsort(-books["n_interactions"].to_numpy(), kind="stable").tolist()
+
+    bare: dict[tuple[str, str], list[int]] = {}
+    for i in order:  # most-rated first
+        if heads[i] is None and norms[i] and akeys[i] and not boxsets[i]:
+            bare.setdefault((norms[i], akeys[i]), []).append(i)
+    tried: Counter[tuple[int, int]] = Counter()
+    pairs: list[tuple[int, int]] = []
+    for j in order:
+        if heads[j] is None or not akeys[j] or boxsets[j]:
+            continue
+        for i in bare.get((heads[j], akeys[j]), []):
+            key = (works.find(i), works.find(j))
+            if key[0] != key[1] and tried[key] < SUBTITLE_PAIRS_PER_WORKS:
+                tried[key] += 1
+                pairs.append((i, j))
+
+    result = SubtitleMerges()
+    texts = blurbs(sorted({k for pair in pairs for k in pair}))
+    for i, j in pairs:
+        result.counts["candidates"] += 1
+        if works.find(i) == works.find(j):
+            result.counts["already_merged"] += 1
+            continue
+        if volume_conflict(volumes[i], volumes[j]) or works.conflict(i, j):
+            result.counts["blocked_volume_or_work"] += 1
+            continue
+        a, b = blurb_key(texts.get(i), chars), blurb_key(texts.get(j), chars)
+        if not a or not b:
+            result.counts["no_description"] += 1
+            continue
+        similarity = round(fuzz.token_sort_ratio(a, b))
+        if similarity < threshold:
+            result.counts["dissimilar_description"] += 1
+            near.add(
+                {
+                    "a": i,
+                    "b": j,
+                    "token_set": round(fuzz.token_set_ratio(norms[i], norms[j])),
+                    "token_sort": round(fuzz.token_sort_ratio(norms[i], norms[j])),
+                    "reason": "subtitle_description",
+                    "description_sim": similarity,
+                }
+            )
+            continue
+        works.union(i, j, "subtitle")
+        result.counts["merged"] += 1
+        result.edges.append({"a": i, "b": j, "description_sim": similarity})
+    return result
+
+
 def prepare(books: pd.DataFrame, rules: TitleRules, gr_index: pd.DataFrame) -> pd.DataFrame:
     """Per-edition keys used by the merge: ISBN key, normalized title, author key, volume, box-set
     flag and Goodreads work/series."""
@@ -302,6 +437,7 @@ def prepare(books: pd.DataFrame, rules: TitleRules, gr_index: pd.DataFrame) -> p
         as_isbn13(a, b) for a, b in zip(books["isbn10"], books["isbn13"], strict=True)
     ]
     books["norm_title"] = [normalize_title(t, rules) for t in books["title"]]
+    books["head"] = pd.Series([title_head(t, rules) for t in books["title"]], dtype=object)
     books["author_key"] = [author_key(a) for a in books["author"]]
     books["volume"] = pd.Series(
         [volume_number(t) for t in books["title"]], dtype=object
@@ -332,9 +468,13 @@ def prepare(books: pd.DataFrame, rules: TitleRules, gr_index: pd.DataFrame) -> p
 
 
 def merge(
-    books: pd.DataFrame, params: Mapping[str, Any], rng: np.random.Generator
-) -> tuple[Works, NearMisses]:
-    """Run every merge rule over the prepared editions; box sets stay alone."""
+    books: pd.DataFrame,
+    params: Mapping[str, Any],
+    rng: np.random.Generator,
+    blurbs: Blurbs | None = None,
+) -> tuple[Works, NearMisses, SubtitleMerges]:
+    """Run every merge rule over the prepared editions; box sets stay alone. ``blurbs`` reads
+    edition blurbs for the subtitle rule (default: the ``books`` columns)."""
     work_ids = [
         None if box else w for w, box in zip(books["work_id"], books["boxset"], strict=True)
     ]
@@ -348,7 +488,8 @@ def merge(
     goodreads_unions(keyed, works)
     near = NearMisses(rng)
     title_unions(books, works, params, near)
-    return works, near
+    subtitles = subtitle_unions(books, works, params, near, blurbs or frame_blurbs(books))
+    return works, near, subtitles
 
 
 def canonical_records(
@@ -432,6 +573,28 @@ def fill_texts(books_raw: Path, records: pd.DataFrame, row_of_asin: Mapping[str,
         records[column] = values
 
 
+def assign_works(
+    books: pd.DataFrame,
+    works: Works,
+    slices: Sequence[str],
+    rules: TitleRules,
+    drop_boxsets: bool,
+) -> pd.DataFrame:
+    """Build the work records and write each edition's ``root``, ``merge_rule``,
+    ``in_slice_edition``, ``canonical_id`` and ``status`` into ``books``."""
+    books["root"] = works.roots()
+    books["merge_rule"] = [r or "singleton" for r in works.rule]
+    books["in_slice_edition"] = books["category"].isin(slices)
+    records = canonical_records(books, slices, rules)
+    records["status"] = work_status(records, drop_boxsets)
+    if records["canonical_id"].duplicated().any():
+        raise DataError("data.canonical produced duplicate canonical ids")
+    by_root = records.set_index("root")
+    for column in ("canonical_id", "status"):
+        books[column] = by_root.loc[books["root"], column].to_numpy()
+    return records
+
+
 def work_status(records: pd.DataFrame, drop_boxsets: bool) -> list[str]:
     """``boxset`` (dropped), ``out_of_slice`` (no edition in a genre slice) or ``kept``."""
     return [
@@ -452,6 +615,7 @@ def build_report(
     records: pd.DataFrame,
     works: Works,
     near: NearMisses,
+    subtitles: SubtitleMerges,
     slices: Sequence[str],
     goodreads_enabled: bool,
 ) -> dict[str, Any]:
@@ -502,6 +666,10 @@ def build_report(
             "kept_works_unmatched": int((~kept["gr_matched"]).sum()),
         },
         "near_misses": dict(near.counts.most_common()),
+        "subtitle_rule": dict(sorted(subtitles.counts.items()))
+        | {
+            "kept_works_joined": sum(books["status"].iat[e["a"]] == "kept" for e in subtitles.edges)
+        },
         "largest_kept_works": [
             {
                 "canonical_id": r.canonical_id,
@@ -519,12 +687,15 @@ def build_audit(
     books: pd.DataFrame,
     records: pd.DataFrame,
     near: NearMisses,
+    subtitles: SubtitleMerges,
     rng: np.random.Generator,
 ) -> pd.DataFrame:
     """``merge_audit.csv``: ``AUDIT_GROUPS`` random kept works with 2+ editions (one row per
-    edition, up to ``AUDIT_MAX_MEMBERS``, scored against the most-rated one) and
-    ``AUDIT_NEAR_MISSES`` title pairs that were not merged, spread evenly over the reasons. The
-    reviewer fills ``verdict``: Y = right decision, N = wrong."""
+    edition, up to ``AUDIT_MAX_MEMBERS``, scored against the most-rated one),
+    ``AUDIT_NEAR_MISSES`` title pairs that were not merged, spread evenly over the reasons, and
+    ``AUDIT_SUBTITLE`` random kept works joined only by the subtitle rule (the two editions of the
+    joining edge, ``merge_rule`` = subtitle). The reviewer fills ``verdict``: Y = right decision,
+    N = wrong."""
 
     def edition_row(i: int, **extra: Any) -> dict[str, Any]:
         return {c: books[c].iat[i] for c in AUDIT_EDITION_COLUMNS} | extra
@@ -571,6 +742,27 @@ def build_audit(
                     token_sort=m["token_sort"],
                 )
             )
+    by_work: dict[str, Mapping[str, Any]] = {}
+    for edge in subtitles.edges:  # one joining edge per kept work
+        if status[edge["a"]] == "kept":
+            by_work.setdefault(books["canonical_id"].iat[edge["a"]], edge)
+    edges = [by_work[w] for w in sorted(by_work)]
+    picked = np.sort(rng.choice(len(edges), size=min(AUDIT_SUBTITLE, len(edges)), replace=False))
+    for n, k in enumerate(picked.tolist(), start=1):
+        edge = edges[k]
+        a, b = books["norm_title"].iat[edge["a"]], books["norm_title"].iat[edge["b"]]
+        for i in (edge["a"], edge["b"]):
+            rows.append(
+                edition_row(
+                    i,
+                    audit_kind="subtitle_merge",
+                    audit_id=f"S{n:03d}",
+                    reason=f"description similarity {edge['description_sim']}",
+                    token_set=round(fuzz.token_set_ratio(a, b)),
+                    token_sort=round(fuzz.token_sort_ratio(a, b)),
+                )
+                | {"merge_rule": "subtitle"}
+            )
     audit = pd.DataFrame(rows).reindex(columns=AUDIT_COLUMNS)
     audit["year"] = audit["year"].astype("Int64")  # 2015, not 2015.0, when a year is missing
     return audit
@@ -611,18 +803,9 @@ def build_canonical(ctx: StageContext) -> None:
         pd.read_parquet(ctx.path("data:gr_isbn_index.parquet")),
     )
     ctx.count("editions", len(books))
-    works, near = merge(books, params, ctx.rng)
-    books["root"] = works.roots()
-    books["merge_rule"] = [r or "singleton" for r in works.rule]
-    books["in_slice_edition"] = books["category"].isin(slices)
-
-    records = canonical_records(books, slices, rules)
-    records["status"] = work_status(records, bool(params["drop_boxsets"]))
-    if records["canonical_id"].duplicated().any():
-        raise DataError("data.canonical produced duplicate canonical ids")
-    by_root = records.set_index("root")
-    for column in ("canonical_id", "status"):
-        books[column] = by_root.loc[books["root"], column].to_numpy()
+    blurbs = parquet_blurbs(raw_path, books["parent_asin"].tolist())
+    works, near, subtitles = merge(books, params, ctx.rng, blurbs)
+    records = assign_works(books, works, slices, rules, bool(params["drop_boxsets"]))
 
     kept = records[records["status"] == "kept"].sort_values("canonical_id").reset_index(drop=True)
     fill_texts(raw_path, kept, {a: r for r, ms in enumerate(kept["member_asins"]) for a in ms})
@@ -630,10 +813,10 @@ def build_canonical(ctx: StageContext) -> None:
     write_table(books, MAP_SCHEMA, ctx.out("data:asin_to_canonical.parquet"))
 
     enabled = bool(ctx.param("data.use_goodreads_graph"))
-    report = build_report(books, records, works, near, slices, enabled)
+    report = build_report(books, records, works, near, subtitles, slices, enabled)
     path = ctx.out("results:canonical/canonical_report.json")
     path.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-    audit = build_audit(books, records, near, ctx.rng)
+    audit = build_audit(books, records, near, subtitles, ctx.rng)
     # utf-8-sig: Excel on Windows reads a CSV as UTF-8 only with a BOM
     audit.to_csv(ctx.out("results:canonical/merge_audit.csv"), index=False, encoding="utf-8-sig")
 
@@ -646,6 +829,7 @@ def build_canonical(ctx: StageContext) -> None:
     ctx.count("audit_rows", len(audit))
     ctx.notes["merge_edges"] = report["merge_edges"]
     ctx.notes["near_misses"] = report["near_misses"]
+    ctx.notes["subtitle_rule"] = report["subtitle_rule"]
     ctx.log.info("\n%s", report_summary(report))
     ctx.log.warning(AUDIT_MESSAGE)
 
@@ -675,6 +859,8 @@ def report_summary(report: Mapping[str, Any]) -> str:
         ),
         "not merged (near misses by reason): "
         + ", ".join(f"{k} {v:,}" for k, v in report["near_misses"].items()),
+        "subtitle rule (D32): "
+        + ", ".join(f"{k} {v:,}" for k, v in report.get("subtitle_rule", {}).items()),
         "largest kept works:",
         *(
             f"  {w['n_members']:>4} editions {w['n_interactions']:>7,} interactions  "
