@@ -37,6 +37,8 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
   user's review and a decision on the SF & Fantasy share after sizing. Next phase: Week 4 evaluation
   harness (§8) and baselines.
 - Colab cells must end with `drive.flush_and_unmount()` (D38).
+- Open items for v1 (D39): slice-aware sizing; `kcore.item` 5 vs 10 report; 10-20K book catalogue;
+  a serving-catalogue proposal. Week 4 runs on v0 as is (user, 2026-10-14).
 
 ## Week 3 implementation notes (for the next session)
 

@@ -29,6 +29,8 @@ STAGE_MODULES: tuple[str, ...] = (
     "ml.data.clean",
     "ml.data.split",
     "ml.data.eda",
+    "ml.nlp.content",
+    "ml.eval.baselines",
 )
 
 
