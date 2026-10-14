@@ -572,3 +572,16 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
   before the dedup.
 - **Cost of this fix on Colab:** `ml/data/stream.py` is in the code fingerprints of `data.meta` and
   `data.reviews`, so both rerun once, and the reviews stream starts over.
+
+## 2026-10-14: v0 frozen (Week 3 run on Colab)
+
+### D38. v0 sizing, and Drive flushing
+- **Sizing:** the user fraction recorded by `data.kcore_split` is in `models/registry.json`
+  (`datasets.v0.sizing`), and the v0 numbers are in `results/v0/eda/summary.json` and `attrition.csv`.
+  Sampling users and then re-applying the 10-per-item core leaves a small catalogue (see `summary.json`);
+  this is fine for development, and v1 sizing is revisited before Week 11.
+- **Drive flushing:** after a run, Drive's FUSE mount can still be uploading when the session ends (a
+  second runtime briefly saw a 0-byte `reviews_clean.parquet` and no later manifests). The data notebook
+  now ends with `drive.flush_and_unmount()`, and one-off cells do the same.
+- **Open (user decision):** the slice mix shifts away from SF & Fantasy at the k-core and sizing steps
+  (`summary.json` -> `slice_mix`).

@@ -298,3 +298,18 @@
   last good one, and marks finished streams. Tests: lost part, old-format checkpoint, finished stream.
   `pytest -m "not slow"`: 257 passed, 1 skipped.
 
+## 2026-10-14: Week 3 gate
+
+- Colab: every stage through `data.eda` complete. `results/v0/` (canonical audit and report, EDA
+  summary, attrition table and figures) is committed; `models/registry.json` holds the v0 file sha256s,
+  fingerprint and sizing.
+- The notebook's data cell now ends with `drive.flush_and_unmount()` (D38).
+
+### Gate (Week 3)
+- [x] All Phase 1 stages run with `--sample` locally and in full on Colab; manifests complete
+- [x] Registry updated (`models/registry.json`, v0)
+- [x] Tests pass; CI green
+- [x] Results committed (`results/v0/canonical`, `results/v0/eda`)
+- [x] Decisions logged (D28-D38); merge audit recorded (model-drafted, spot-checked by the user)
+- [ ] User reviews the gate, including the SF & Fantasy share after sizing (`summary.json` `slice_mix`)
+
