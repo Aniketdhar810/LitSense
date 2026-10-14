@@ -522,8 +522,19 @@ def _is_current(st: Stage, paths: RunPaths, fp: str) -> bool:
     return (
         is_complete(manifest)
         and manifest.get("fingerprint") == fp
-        and all(paths.resolve(out).exists() for out in st.outputs)
+        and all(_intact(paths.resolve(out), manifest["files"].get(out)) for out in st.outputs)
     )
+
+
+def _intact(path: Path, entry: Mapping[str, Any] | None) -> bool:
+    """The output exists with the size its manifest recorded. Google Drive can keep a file's name
+    while losing its content (a 0-byte parquet after a session ended, D42), so existence alone is
+    not enough; sizes are cheap to check, hashes are not."""
+    if not path.exists() or entry is None:
+        return False
+    if path.is_dir() or "bytes" not in entry:
+        return True
+    return path.stat().st_size == entry["bytes"]
 
 
 def _clear_staging(st: Stage, paths: RunPaths) -> None:
