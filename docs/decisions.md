@@ -528,3 +528,35 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
 - **Memory:** the pair set holds the kept works' 5-core pairs as strings (about 4.5M on the full run).
   Parts are checkpointed every `data.stream.checkpoint_rows` matches, and dedup reads only the key
   columns before rewriting the parts.
+
+### D35. `data.clean` details
+- **Rules, in order:** clean the text (tags, entities, NFKC, whitespace; texts over `max_review_chars`
+  are cut at the last sentence end); then `too_short` (< `min_review_chars`); then `non_english`;
+  then `shipping` (a `shipping_patterns` match and no aspect-lexicon term from `ml/nlp/aspect_seeds.py`).
+  Every review keeps its row; `text_ok` and `text_drop_reason` only gate NLP use.
+- **Language ID:** fastText `lid.176` on the first 500 characters flags `non_english` only when the
+  other language has probability >= `data.lid_min_confidence` (0.5, new key). Short English texts are
+  often misread: "Great read!!" -> en 0.12, "meh" -> de 0.44, "Gut" -> sr 0.48, while "Muy bueno el
+  libro, lo recomiendo" -> es 0.95.
+- **fastText bug:** `fasttext-predict` 0.9.2.4 mis-unpacks batch `predict(list)` results (a 3-text
+  list raises; a 2-text list returns labels in place of probabilities). Texts are scored one at a
+  time; the loader is injectable, so CI tests use a stub because fastText is not installed there.
+- **`ml/nlp/aspect_seeds.py`** (taxonomy, lexicons, prototypes, descriptor poles from §11.2) is added
+  now because the shipping rule needs the lexicon.
+
+### D36. `data.kcore_split` details
+- **One interaction per (user, work):** the latest 5-core rating when a reader rated two editions of
+  one work (§7.7 assumed this would not happen). `has_text` = that reader's review of the work survived
+  `data.clean` with `text_ok`.
+- **Sizing:** every user draws one seeded uniform number; a fraction f keeps users whose draw is
+  below f, then the k-core reruns. f is found by bisection (up to 40 steps) until the size is within
+  `target x (1 +/- size_tolerance)`; otherwise the stage fails and reports the closest size. f is in the
+  manifest notes and in `splits.json` (`sizing`); it is copied here after the full run.
+- **`splits.json`** also carries the attrition counts and the slice and genre mix after the k-core and
+  after sizing (the user's "how much SF & Fantasy survives" request). `data.eda` adds the works-kept
+  step from `canonical_report.json`.
+- **Ids:** `id_map.json` = sorted user ids and sorted canonical ids, written only here; a rerun gives
+  identical bytes (tested).
+- **Framework:** `StageContext.upstream_notes(stage)` reads an upstream stage's manifest counts (for
+  the EDA attrition table); the EDA declares one output of each such stage as an input.
+- **CI** installs matplotlib (`CI_ML_PACKAGES`) for the EDA test.

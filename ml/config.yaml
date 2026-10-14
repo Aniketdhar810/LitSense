@@ -30,6 +30,7 @@ data:
   min_pages: 40
   min_review_chars: 20
   max_review_chars: 5000
+  lid_min_confidence: 0.5       # flag non-English only when fastText is this sure (D35)
   kcore: {user: 5, item: 10}    # tune after EDA
   target_interactions: {v0: 100000, v1: 250000}
   size_tolerance: 0.15
