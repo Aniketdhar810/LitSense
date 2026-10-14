@@ -585,3 +585,40 @@ partial run. The run also showed that Colab now uses **Python 3.13**.
   now ends with `drive.flush_and_unmount()`, and one-off cells do the same.
 - **Open (user decision):** the slice mix shifts away from SF & Fantasy at the k-core and sizing steps
   (`summary.json` -> `slice_mix`).
+
+### D39. Open items for the v1 rebuild (user decision, 2026-10-14; resolve before Week 11)
+v0 stays as built, and Week 4 starts on it. Before v1:
+1. **Slice-aware sizing:** sample users so each genre slice keeps roughly its pre-sizing share of
+   interactions.
+2. **Book threshold:** compare `kcore.item` 5 vs 10. For each, report catalogue size, long-tail share
+   and number of evaluable test users; the user chooses (the long tail is the thesis).
+3. **Catalogue size:** target roughly 10-20K books in v1; report what each sizing option gives.
+4. **Serving catalogue vs training set:** propose (do not build) serving a larger catalogue, e.g. all
+   in-slice works with >= N reviews, scored by content and review features for books outside
+   training, with its cost (bundle size, RSS, latency, evaluation caveats).
+
+## 2026-10-14: Week 4 (evaluation harness and baselines)
+
+### D40. Harness and baseline choices
+- **Scorer cutoff:** each scorer records the cutoff of the `FitData` it was fit on. `evaluate` raises
+  `LeakageError` when it differs from the mode's cutoff, and `FitData` refuses rows at or after its
+  cutoff. Stages write the cutoff into their manifest (§3.2).
+- **Degenerate scores:** a row whose finite scores all tie, or that has fewer than two finite scores,
+  raises `DegenerateScoresError`; -inf outside a candidate set is allowed (§8.3).
+- **Cold items:** collaborative scorers (popularity, ItemKNN, ALS) give items with no fit interactions
+  -inf (§8.1); content-only scores every item.
+- **Baselines are refit, not stored:** `eval.baselines_val` fits random, popularity, ItemKNN, ALS and
+  content-only inside the stage (seconds to minutes each). Model artifacts with manifests start with
+  LightGCN in Week 5, which serving needs.
+- **Content text:** title, author, genre labels, then the blurb (`features`, else `description`)
+  truncated by tokens to the 256-piece budget. Reviews and LLM text never go in.
+- **Content-only profile:** the rating-weighted mean of content vectors of the user's fit items rated
+  >= `relevance_min_rating` (all fit items if none), L2-normalized (§9.2).
+- **Reports:** `table_main.csv` (means with 95% bootstrap CIs, beyond-accuracy metrics, catalogue size
+  as the coverage denominator), `table_strata.csv`, `table_longtail.csv` (long-tail and cold-item
+  truth), and `bootstrap.csv` (each model vs popularity, paired, all users and long tail), plus two
+  figures. The admin `metrics.json` (§15.6) follows once LightGCN results exist.
+- **Test lock:** `ml/eval/lock.py` implements §8.8 now (tested); the `eval.test` stage is Week 13.
+- **ALS:** `implicit` 0.7.3 on the (users x items) matrix with confidence alpha x binary; output
+  shapes are asserted, and BLAS runs single-threaded during the fit.
+- **CI** installs scipy and implicit.

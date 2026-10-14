@@ -4,7 +4,7 @@
 PYTHON ?= python
 # Packages from requirements-ml.txt that the fast (not slow) tests need. CI installs only these on
 # top of requirements-core.txt; extend the list when a phase's fast tests import more.
-CI_ML_PACKAGES := pandas|pyarrow|requests|pytest|ruff|matplotlib
+CI_ML_PACKAGES := pandas|pyarrow|requests|pytest|ruff|matplotlib|scipy|implicit
 
 .PHONY: install-core install-ml install-ci install-colab lint format test test-all tiny stages
 

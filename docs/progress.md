@@ -313,3 +313,15 @@
 - [x] Decisions logged (D28-D38); merge audit recorded (model-drafted, spot-checked by the user)
 - [ ] User reviews the gate, including the SF & Fantasy share after sizing (`summary.json` `slice_mix`)
 
+## 2026-10-14: Week 4 harness and baselines built
+
+- `ml/eval/` (data, metrics, evaluator, strata, bootstrap, report, lock), `ml/models/baselines.py`
+  (random, popularity, ItemKNN, ALS, content-only), `ml/nlp/embed.py` + `ml/nlp/content.py` (stage
+  `nlp.content`), stage `eval.baselines_val`, `notebooks/02_eval_baselines.ipynb`. Decisions D39 (v1
+  open items) and D40.
+- Tests: hand-computed metrics, masking, degenerate scores, cutoff mismatch, bootstrap, strata, test
+  lock, baseline shapes and cold items, content text builder (no review text), the tiny fixture
+  through `eval.baselines_val`. `pytest -m "not slow"`: 273 passed, 1 skipped.
+- Next: one Colab run (`run all --until eval.baselines_val`); commit `results/v0/val` and
+  `results/v0/content`; the Week 4 gate.
+
