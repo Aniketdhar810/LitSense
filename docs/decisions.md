@@ -636,3 +636,34 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   recorded (directories: existence). Sizes are cheap; full hashes are not. A truncated output makes the
   stage stale, so `run all` rebuilds it. `ml/common/stage.py` is framework code, outside stage
   fingerprints, so this change reruns nothing by itself.
+
+## 2026-10-15: Week 5, LightGCN
+
+### D43. LightGCN training, artifacts and evaluation stage
+- **Stage `models.lightgcn_val`** (`ml/models/lightgcn.py`) trains on train (cutoff t1) and writes
+  `artifacts/<v>/eval_val/lightgcn/`: `lgcn_user.npy`, `lgcn_item.npy`, `lgcn_item_norm.npy`,
+  `item_degree.npy` and `meta.json` (cutoff, mode, params, best epoch, device, torch version), plus
+  `results/<v>/training/lightgcn_val.csv` (loss and inner NDCG@20 per evaluation). The test-mode set
+  (train + val, t2) reuses `build_lightgcn` in Week 13.
+- **Training choices not fixed by s9.4:** one epoch = every fit positive once in shuffled batches;
+  full-graph propagation every step; the L2 term counts the negatives' ego embeddings divided by
+  `n_negs`; the inner split holds out max(1, floor(0.1 n)) of the latest rows of users with >= 6 fit
+  interactions and is scored by the shared `build_eval_data` + `evaluate` (same masks and relevance
+  rule as val). The refit trains from scratch on the whole fit window, same seed, for the best epoch
+  count. GPU sparse products are not bit-reproducible; CPU runs are (tested).
+- **Negative sampler:** vectorized redraws, then the rare survivors are drawn from the user's
+  complement, so a positive is never returned (s16.2).
+- **Scoring:** `ml/models/embedding_scorers.py` (numpy only, so evaluation never imports torch) gives
+  `lightgcn_raw` (u . i) and `lightgcn_norm` (u . i/|i|); items with no fit interactions score -inf.
+  A stored scorer's `fit` refuses an artifact whose cutoff, shapes or item degrees differ from the
+  evaluation's fit data.
+- **Stage rename:** `eval.baselines_val` became `eval.val` (`ml/eval/validation.py`, the name in
+  s7.0). It refits the baselines, loads LightGCN, copies `meta.json` into each LightGCN result file,
+  and writes paired bootstraps against popularity, `lightgcn_raw` and `lightgcn_norm` (s2.2 #1). The
+  baseline numbers are recomputed with the same seed and code.
+- **CI** installs CPU-only torch (the `requirements-ml.txt` pin) from PyTorch's CPU index; the PyPI
+  wheel bundles CUDA.
+- **Speed:** about 6 s per epoch on a laptop CPU at v0 size (synthetic benchmark), so Colab runs use a
+  T4 GPU runtime.
+- **Hyperparameters:** the s5 values for the first run; if the best epoch is the last one allowed,
+  training was still improving and `lr`/`max_epochs` are tuned on val (logged here).

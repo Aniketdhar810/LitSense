@@ -355,3 +355,18 @@
 - `notebooks/make_notebooks.py` (the notebook generator) is now in the repo; `context.md` and CLAUDE.md
   §0.5 are updated. Next: Week 5 (LightGCN, projection hybrid and controls, MVP `recommend`, bundle v0).
 
+
+## 2026-10-15: Week 4 gate approved; Week 5 part 1 (LightGCN)
+
+- The user approved the Week 4 gate.
+- Built `ml/models/lightgcn.py` (stage `models.lightgcn_val`), `ml/models/embedding_scorers.py`
+  (`lightgcn_raw`, `lightgcn_norm`), and renamed the evaluation stage to `eval.val`, which now also
+  evaluates LightGCN and compares every model with both LightGCN variants (D43). CI installs CPU
+  torch; `02_eval_baselines.ipynb` runs `--until eval.val` on a GPU runtime.
+- Tests (`tests/ml/models/test_lightgcn.py`): the sampler never returns a positive, normalized
+  adjacency with zero rows for isolated nodes, the inner split, LightGCN beats random on training
+  NDCG, seeded training and early stopping, -inf for zero-degree items in both scorers, artifact
+  leakage checks; the tiny fixture runs through `eval.val`. `pytest -m "not slow"`: 280 passed,
+  2 skipped (local raw samples absent in this worktree).
+- Next: one Colab run (`run all --until eval.val`, GPU); then the Week 5 gate check (LightGCN vs
+  ALS on val), the projection hybrid and its controls.

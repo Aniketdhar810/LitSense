@@ -207,13 +207,15 @@ EVAL = [
     (
         "markdown",
         """
-# Phase 2: evaluation harness and baselines (Week 4)
+# Phase 2: evaluation harness, baselines and LightGCN (Weeks 4-5)
 
-Run the setup cells, then the cell below: `nlp.content` embeds every book's metadata with MiniLM (a
-few minutes; a GPU runtime is faster but not required for v0), and `eval.baselines_val` fits random,
-popularity, ItemKNN, ALS and content-only on train and evaluates them on validation. Results go to
-`MyDrive/litsense/results/v0/val/` and `results/v0/content/`. The last cell finishes uploading to
-Drive.
+Use a GPU runtime (Runtime > Change runtime type > T4 GPU). Run the setup cells, then the cell
+below:
+`nlp.content` embeds every book's metadata with MiniLM, `models.lightgcn_val` trains LightGCN on
+train with early stopping, and `eval.val` fits random, popularity, ItemKNN, ALS and content-only and
+evaluates them with both LightGCN variants on validation. Results go to
+`MyDrive/litsense/results/v0/val/`, `results/v0/content/` and `results/v0/training/`. The last cell
+finishes uploading to Drive.
 """,
     ),
     *SETUP[1:],
@@ -221,7 +223,7 @@ Drive.
         "code",
         """
 %cd /content/LitSense
-!python -m ml.stages run all --until eval.baselines_val < /dev/null
+!python -m ml.stages run all --until eval.val < /dev/null
 """,
     ),
     (

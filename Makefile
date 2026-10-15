@@ -20,9 +20,12 @@ install-colab:
 	$(PYTHON) -m pip install -q -r requirements-core.txt -r .colab-requirements.txt
 	rm -f .colab-requirements.txt
 
+# CPU-only torch from PyTorch's index for the LightGCN tests (the PyPI wheel bundles CUDA, D43).
 install-ci:
 	grep -E '^($(CI_ML_PACKAGES))==' requirements-ml.txt > .ci-requirements.txt
 	$(PYTHON) -m pip install -r requirements-core.txt -r .ci-requirements.txt
+	$(PYTHON) -m pip install --index-url https://download.pytorch.org/whl/cpu \
+		$$(grep '^torch==' requirements-ml.txt)
 	rm -f .ci-requirements.txt
 
 lint:
