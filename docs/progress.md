@@ -325,3 +325,24 @@
 - Next: one Colab run (`run all --until eval.baselines_val`); commit `results/v0/val` and
   `results/v0/content`; the Week 4 gate.
 
+## 2026-10-15: Week 4 gate (validation baselines)
+
+- Colab: `data.clean` and `data.kcore_split` rebuilt the output Drive had lost (D42). `data.eda` stayed
+  up to date, so the rebuilt v0 files have the same sha256 as `models/registry.json`. `nlp.content` and
+  `eval.baselines_val` complete.
+- Committed `results/v0/val/`:
+  - `table_main.csv`, `table_strata.csv`, `table_longtail.csv`, `bootstrap.csv`;
+  - per-model JSON and per-user rows;
+  - two figures.
+  Also `results/v0/content/` (anisotropy check, neighbour samples).
+- Read from those files: ItemKNN, content-only and ALS all beat popularity on NDCG@10 and Recall@20
+  (paired CIs exclude zero). Content-only is the only baseline that scores cold items and the strongest
+  on long-tail truth. Popularity recommends no long-tail items. Mean pairwise content cosine is below
+  the anisotropy warning. Exact values are in `results/v0/val/` and `results/v0/content/`.
+
+### Gate (Week 4)
+- [x] Metric unit tests pass (hand-computed case, masks, degenerate scores, bootstrap, lock)
+- [x] Random and popularity (and ItemKNN, ALS, content-only) evaluated end to end on val, with strata and CIs
+- [x] Results committed; decisions logged (D39-D42); CI green
+- [ ] User reviews the gate
+

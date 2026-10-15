@@ -33,9 +33,10 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what has changed), `docs/pro
 - Working mode (user, 2026-10-14): act autonomously. Commit, push, open PRs and merge my own PRs once CI
   is green; update context/progress/decisions myself. Stop only for Colab runs (give ONE cell plus the exact
   output to send back) or real decisions. Keep messages short.
-- Week 3 done on Colab: v0 frozen (`models/registry.json`, `results/v0/`). The gate is waiting for the
-  user's review and a decision on the SF & Fantasy share after sizing. Next phase: Week 4 evaluation
-  harness (§8) and baselines.
+- Weeks 3 and 4 done on Colab: v0 frozen (`models/registry.json`, `results/v0/`); validation baselines
+  in `results/v0/val/` (harness D40-D42). The Week 4 gate is waiting for the user's review. Next: Week 5
+  (LightGCN raw and normalized, projection hybrid with shuffled and static controls, MVP blend
+  `recommend`, bundle export v0).
 - Colab cells must end with `drive.flush_and_unmount()` (D38).
 - Open items for v1 (D39): slice-aware sizing; `kcore.item` 5 vs 10 report; 10-20K book catalogue;
   a serving-catalogue proposal. Week 4 runs on v0 as is (user, 2026-10-14).
