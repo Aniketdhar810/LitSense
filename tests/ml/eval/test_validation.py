@@ -1,5 +1,5 @@
 """Baselines (CLAUDE.md s9.1-9.3), the content text builder (s10.1, s16.2 leakage) and the
-eval.baselines_val stage on the tiny fixture."""
+eval.val stage on the tiny fixture."""
 
 import hashlib
 import json
@@ -17,7 +17,8 @@ import ml.data.goodreads  # noqa: F401  (registers the stage)
 import ml.data.meta  # noqa: F401  (registers the stage)
 import ml.data.reviews  # noqa: F401  (registers the stage)
 import ml.data.split  # noqa: F401  (registers the stage)
-import ml.eval.baselines  # noqa: F401  (registers the stage)
+import ml.eval.validation  # noqa: F401  (registers the stage)
+import ml.models.lightgcn  # noqa: F401  (registers the stage)
 import ml.nlp.content  # noqa: F401  (registers the stage)
 from ml.common.manifest import read_manifest
 from ml.common.stage import RunPaths, run_all
@@ -133,28 +134,54 @@ def small_core(tiny_cfg: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
     tiny_cfg["data"]["kcore"] = {"user": 2, "item": 2}
     tiny_cfg["eval"]["ks"] = [5, 10]
     tiny_cfg["eval"]["bootstrap_resamples"] = 50
+    tiny_cfg["models"]["lightgcn"] |= {
+        "dim": 8,
+        "batch_size": 64,
+        "max_epochs": 4,
+        "eval_every": 2,
+        "patience": 1,
+        "inner_val_min_user": 3,
+    }
     return tiny_cfg
 
 
 def test_stage_on_the_tiny_fixture(small_core: Config) -> None:
-    run_all(small_core, until="eval.baselines_val")
+    run_all(small_core, until="eval.val")
     paths = RunPaths.from_config(small_core, None)
     out = paths.resolve("results:val/")
     table = pd.read_csv(out / "table_main.csv")
-    assert set(table["model"]) == {"random", "popularity", "itemknn", "als", "content"}
+    assert set(table["model"]) == {
+        "random",
+        "popularity",
+        "itemknn",
+        "als",
+        "content",
+        "lightgcn_raw",
+        "lightgcn_norm",
+    }
     assert (table["ndcg@10_low"] <= table["ndcg@10"]).all()
     assert (table["ndcg@10"] <= table["ndcg@10_high"]).all()
     assert table["catalogue_items"].nunique() == 1
     pop = json.loads((out / "popularity.json").read_text(encoding="utf-8"))
     splits = json.loads(paths.resolve("data:splits.json").read_text(encoding="utf-8"))
     assert pop["cutoff"] == splits["t1"]["ms"] and pop["mode"] == "val"
-    manifest = read_manifest(paths.manifest("eval.baselines_val"))
+    manifest = read_manifest(paths.manifest("eval.val"))
     assert manifest["cutoff"] == splits["t1"]["ms"]
     for name in ("table_strata.csv", "table_longtail.csv", "bootstrap.csv",
                  "bars_ndcg_recall.png", "ndcg_by_bucket.png"):  # fmt: skip
         assert (out / name).exists()
     paired = pd.read_csv(out / "bootstrap.csv")
-    assert set(paired["vs"]) == {"popularity"} and "popularity" not in set(paired["model"])
+    assert set(paired["vs"]) == {"popularity", "lightgcn_raw", "lightgcn_norm"}
+    assert not (paired["vs"] == paired["model"]).any()
+    lgcn = json.loads((out / "lightgcn_norm.json").read_text(encoding="utf-8"))
+    assert lgcn["artifact"]["cutoff"] == splits["t1"]["ms"]  # the manifest-side record (s2.2 #5)
+    assert lgcn["artifact"]["model"] == "lightgcn" and lgcn["artifact"]["mode"] == "val"
+    user = np.load(paths.resolve("artifacts:eval_val/lightgcn/lgcn_user.npy"))
+    norm = np.load(paths.resolve("artifacts:eval_val/lightgcn/lgcn_item_norm.npy"))
+    assert user.shape[1] == 8 and np.allclose(np.linalg.norm(norm, axis=1), 1, atol=1e-5)
+    trained = read_manifest(paths.manifest("models.lightgcn_val"))
+    assert trained["cutoff"] == splits["t1"]["ms"] and trained["status"] == "complete"
+    assert paths.resolve("results:training/lightgcn_val.csv").exists()
     emb = np.load(paths.resolve("artifacts:content/content_item.npy"))
     books = pd.read_parquet(paths.resolve("data:books.parquet"))
     assert emb.shape == (len(books), 16)

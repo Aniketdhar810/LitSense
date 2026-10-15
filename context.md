@@ -17,11 +17,13 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
   - `ml/eval/`: data, metrics, evaluator, strata, bootstrap, report, lock, errors.
   - `ml/models/baselines.py`: random, popularity, ItemKNN, ALS, content-only.
   - `ml/nlp/embed.py` and `ml/nlp/content.py`.
-  - Stages `nlp.content` and `eval.baselines_val`. Results are in `results/v0/val/` (tables with 95% CIs,
+  - Stages `nlp.content` and `eval.val` (formerly `eval.baselines_val`). Results are in `results/v0/val/` (tables with 95% CIs,
     strata, long tail, paired bootstrap vs popularity, figures).
 - **Strongest baseline so far: ItemKNN** on NDCG@10 and Recall@20 (see `results/v0/val/table_main.csv`).
   Content-only is strongest on long-tail and cold-item truth; popularity recommends no long-tail items.
-- **Week 4 gate:** criteria met; waiting for the user's review.
+- **Week 4 gate:** approved by the user (2026-10-15).
+- **Week 5 in progress:** LightGCN (`models.lightgcn_val`) and stage `eval.val` built (D43); waiting for
+  the first Colab run (GPU).
 - **Next step: Week 5** (§17):
   - LightGCN, raw and normalized (§9.4), with artifacts and manifests in `artifacts/v0/eval_val/`;
   - the projection hybrid with shuffled and static-fusion controls (§9.5);

@@ -1,8 +1,10 @@
-"""Stage eval.baselines_val (CLAUDE.md s8-9, Week 4): fit every baseline on train and evaluate it
-on validation, with strata, bootstrap intervals, paired comparisons, tables and figures.
+"""Stage eval.val (CLAUDE.md s8-9): every model on validation, with strata, bootstrap intervals,
+paired comparisons, tables and figures.
 
-Baselines are cheap to fit, so they are refit here instead of keeping model artifacts (D40);
-LightGCN and the projection hybrid (Week 5) keep artifacts with manifests.
+Baselines are cheap to fit, so they are refit here instead of keeping model artifacts (D40).
+LightGCN is trained by its own stage and loaded from ``artifacts/<v>/eval_val/``; its artifact
+metadata is copied next to its results (s2.2 #5). Every model is compared, paired, with popularity
+and with both LightGCN variants (s2.2 #1).
 """
 
 import json
@@ -23,18 +25,24 @@ from ml.models.baselines import (
     PopularityScorer,
     RandomScorer,
 )
+from ml.models.embedding_scorers import EmbeddingArtifact, EmbeddingScorer
 
-REFERENCE = "popularity"
+REFERENCES = ("popularity", "lightgcn_raw", "lightgcn_norm")
 PAIRED_METRICS = ("ndcg@10", "recall@20")
+LIGHTGCN_INPUTS = [
+    f"artifacts:eval_val/lightgcn/{name}"
+    for name in ("lgcn_user.npy", "lgcn_item.npy", "item_degree.npy", "meta.json")
+]
 
 
 @stage(
-    "eval.baselines_val",
+    "eval.val",
     inputs=[
         "data:interactions.parquet",
         "data:splits.json",
         "data:id_map.json",
         "artifacts:content/content_item.npy",
+        *LIGHTGCN_INPUTS,
     ],
     outputs=["results:val/"],
     config_keys=[
@@ -47,8 +55,8 @@ PAIRED_METRICS = ("ndcg@10", "recall@20")
         "models.als",
     ],
 )
-def build_baselines_val(ctx: StageContext) -> None:
-    """Validation results for random, popularity, ItemKNN, ALS and content-only."""
+def build_val(ctx: StageContext) -> None:
+    """Validation results for the baselines and both LightGCN variants."""
     out = ctx.out("results:val/")
     ids = load_id_map(ctx.path("data:id_map.json"))
     splits = json.loads(ctx.path("data:splits.json").read_text(encoding="utf-8"))
@@ -67,12 +75,17 @@ def build_baselines_val(ctx: StageContext) -> None:
     ev = ctx.param("eval")
     ks, n_boot = tuple(int(k) for k in ev["ks"]), int(ev["bootstrap_resamples"])
     buckets = ctx.param("data.sparsity_buckets")
+    lightgcn = EmbeddingArtifact.load(
+        ctx.path(LIGHTGCN_INPUTS[0]).parent, "lgcn_user.npy", "lgcn_item.npy"
+    )
     scorers = [
         RandomScorer(ctx.seed),
         PopularityScorer(ctx.param("models.popularity")),
         ItemKNNScorer(ctx.param("models.itemknn")),
         ALSScorer(ctx.param("models.als"), ctx.seed),
         ContentScorer(emb, relevance),
+        EmbeddingScorer("lightgcn_raw", lightgcn, normalize_items=False),
+        EmbeddingScorer("lightgcn_norm", lightgcn, normalize_items=True),
     ]
 
     results: dict[str, EvalResult] = {}
@@ -85,6 +98,7 @@ def build_baselines_val(ctx: StageContext) -> None:
         cold_rows[scorer.name] = cold_item_rows(result, data, ks)
         strata.append(by_sparsity(result, data, buckets).assign(model=scorer.name))
         result.rows.to_parquet(out / f"{scorer.name}.users.parquet", index=False)
+        artifact = getattr(scorer, "artifact", None)
         summary = {
             "model": scorer.name,
             "mode": "val",
@@ -96,6 +110,7 @@ def build_baselines_val(ctx: StageContext) -> None:
             "cold_item_means": cold_rows[scorer.name].drop(columns="u").mean().to_dict()
             if len(cold_rows[scorer.name])
             else {},
+            "artifact": artifact.meta if artifact is not None else None,
         }
         (out / f"{scorer.name}.json").write_text(json.dumps(summary, indent=2) + "\n", "utf-8")
         ctx.log.info("%s: ndcg@10 %.4f", scorer.name, result.means.get("ndcg@10", float("nan")))
@@ -115,8 +130,12 @@ def build_baselines_val(ctx: StageContext) -> None:
     pd.concat([longtail, cold], ignore_index=True).to_csv(out / "table_longtail.csv", index=False)
     paired = pd.concat(
         [
-            report.paired_table(rows, REFERENCE, PAIRED_METRICS, n_boot, ctx.seed),
-            report.paired_table(tail_rows, REFERENCE, PAIRED_METRICS, n_boot, ctx.seed, "longtail"),
+            table
+            for ref in REFERENCES
+            for table in (
+                report.paired_table(rows, ref, PAIRED_METRICS, n_boot, ctx.seed),
+                report.paired_table(tail_rows, ref, PAIRED_METRICS, n_boot, ctx.seed, "longtail"),
+            )
         ],
         ignore_index=True,
     )
