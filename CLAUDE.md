@@ -43,7 +43,7 @@ After each phase gate, write a short summary in `docs/progress.md`: the gate che
 
 ### 0.5 Current state and decisions that override this brief (read `context.md` first)
 
-`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D30, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
+`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D42, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
 
 - **Stage fingerprints (§7.0):** code part = the stage's module plus its transitive `ml`/`litsense_core` imports, not the repo-wide git SHA (D6). Input identity = the sha256 the producer recorded (D7).
 - **Large sources are streamed, never stored (§7.1, §7.5, D18):** `url:<source>` stage inputs; `ml/data/stream.py` (gunzip on the fly, HTTP Range resume, `PartWriter` checkpoints). `data.download` keeps only the 5-core CSV on Drive (D19). `--sample N` reads heads in `local/raw_sample/`.
@@ -51,6 +51,12 @@ After each phase gate, write a short summary in `docs/progress.md`: the gate che
 - **Kindle and audiobook records stay (F1, D17):** they are editions of the same work; `data.canonical` must merge them with print (ISBN incl. `page_source_isbn13`, else title+author heuristic with box-set/volume guards).
 - **Genre slices are set (D26):** Literature & Fiction; Mystery, Thriller & Suspense; Science Fiction & Fantasy.
 - **Canonicalization (§7.4, D28–D29):** merge all `books_raw` editions first, keep a work if any edition is in a slice; title merges also need `token_sort_ratio >= canonical.subset_guard_threshold`, the year gap applies only to non-identical titles, volume guard = both known and different or one unknown and the other ≥ 2; audit files live in `results/<v>/canonical/`. `data.lid` keeps `lid.176.ftz` (D30).
+- **Canonicalization, later rules (§7.4, D31–D33):** shared-ISBN and page-source merges need the same author (or one missing); "Title" merges with "Title: subtitle" only with the same author, the volume guard, no box set and similar blurbs (`canonical.subtitle_description_*`); fuzzy title merges are refused when the titles' numbers differ ("NYPD Red 2" vs "3").
+- **Reviews and cleaning (§7.5–7.6, D34–D35):** dedup = latest per (user, work), then one per (user, text hash); `non_english` only when fastText's other-language probability >= `data.lid_min_confidence`.
+- **Interactions (§7.7, D36):** one interaction per (user, work), the latest rating; `has_text` = that review survived cleaning; sizing finds the user fraction by bisection; `splits.json` also holds attrition and the slice mix.
+- **Evaluation and baselines (§8–9, D40–D41):** `LeakageError`/`DegenerateScoresError` live in `ml/eval/errors.py` (not `ml/common/errors.py`, to keep data-stage fingerprints stable); scorers record their fit cutoff and the evaluator refuses a mismatch; baselines are refit inside `eval.baselines_val` instead of storing artifacts (artifacts start with LightGCN).
+- **Colab and Drive (D37, D38, D42):** checkpoints validate their parts; every Colab run ends with `drive.flush_and_unmount()`; a stage is up to date only if its outputs keep the byte sizes in its manifest.
+- **v1 open items (D39):** slice-aware sizing, `kcore.item` 5 vs 10, a 10–20K book catalogue, and a serving-catalogue proposal, all decided before Week 11.
 - **Environment:** Colab runs Python 3.13; pins work on 3.11–3.13; `make install-colab` never installs torch (D21); fastText is `fasttext-predict` (D25). Notebooks are committed without outputs; CI enforces it (D27).
 
 ## 1. Project context
