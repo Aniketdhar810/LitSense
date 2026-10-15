@@ -346,3 +346,12 @@
 - [x] Results committed; decisions logged (D39-D42); CI green
 - [ ] User reviews the gate
 
+## 2026-10-15: Handoff (state at the end of Week 4)
+
+- Weeks 0-4 done; PRs #1-#18 merged; decisions D1-D42. Week 4 gate criteria met (user review pending).
+- Strongest baseline on val: ItemKNN (`results/v0/val/table_main.csv`).
+- Open v1 items (D39): slice-aware sizing, `kcore.item` 5 vs 10, catalogue size (10-20K target), and a
+  serving-catalogue proposal.
+- `notebooks/make_notebooks.py` (the notebook generator) is now in the repo; `context.md` and CLAUDE.md
+  §0.5 are updated. Next: Week 5 (LightGCN, projection hybrid and controls, MVP `recommend`, bundle v0).
+
