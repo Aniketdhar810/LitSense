@@ -399,3 +399,19 @@
   the tiny fixture runs through `eval.val` with every model. `pytest -m "not slow"`: 284 passed,
   2 skipped (local raw samples absent).
 - Next: one Colab run (`run all --until eval.val`, T4); then the Week 5 projection rows.
+
+## 2026-10-16: Projection results (Week 5, part 2)
+
+- Colab T4 run (main after PR #23): `models.projection_val` 75 s, `eval.val` 35 s; LightGCN reran with
+  identical metrics. Committed `results/v0/val/` (projection, shuffled control, static fusion rows) and
+  the refreshed `results/v0/training/lightgcn_val.csv`.
+- From those files: the projection does not differ from its shuffled control, and is below raw
+  LightGCN on all users; static fusion (alpha 0.7) is the strongest fusion row; no fusion recovers
+  cold items. Reported as a null result in D46.
+
+### Gate (Week 5): status
+- [x] Val results with strata and CIs for random, popularity, ItemKNN, ALS, content-only, LightGCN raw
+  and normalized, projection, projection-shuffled, static fusion
+- [x] LightGCN >= ALS on val (NDCG@10, D44)
+- [ ] MVP blend `recommend` on real artifacts; bundle export v0; recommendations visible in the browser
+- [ ] User reviews the gate
