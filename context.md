@@ -37,9 +37,12 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
   and the real `litsense_core` `load_store`, `download_bundle`, `health`, `catalog`, `recommend`
   (blend ranker, filters, series guard, MMR, genre cap, template reasons); `dev/dev_server.py` shows
   demo readers' recommendations in a browser. Other §15.1 functions still come from the mock.
-- **Waiting on the user:** the Colab run of `run all --until serve.export` (T4), then download
-  `serve_bundle.tar.gz` and the results zip. Then: commit `results/v0/serve/`, check RSS against
-  `serving.max_rss_mb`, view the bundle locally with the dev server, and close the Week 5 gate.
+- **Bundle v0 built on Colab** (`v0-c59e7edd73`, `results/v0/serve/bundle_report.json`: RSS within
+  budget). It is on Drive as `MyDrive/litsense/serve_bundle_v0.tar.gz`.
+- **Waiting on the user:** download that tarball to Downloads so it can be viewed locally with
+  `dev/dev_server.py`; the teammate swaps the mock for it; the user reviews the Week 5 gate.
+- **After the gate: Week 6** (§17): `nlp.onnx` + runtime encoder + parity tests, `nlp.sentences`,
+  `nlp.aspects`, `nlp.sentiment`, annotation CSV + guide; schemas frozen.
 - **Week 5 gate:** val results with strata and CIs for every model incl. projection and shuffled
   (LightGCN >= ALS is met); recommendations visible in the browser; user review.
 

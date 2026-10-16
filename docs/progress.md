@@ -431,3 +431,22 @@
   bundle. `pytest -m "not slow"`: 293 passed, 2 skipped.
 - Next: one Colab run (`run all --until serve.export`), then measure the real bundle (size, RSS),
   view it with the dev server, and close the Week 5 gate.
+
+## 2026-10-17: Bundle v0 built on Colab (Week 5 gate)
+
+- Colab T4 (main after PR #25): `models.lightgcn_serve` and `serve.export` complete; bundle
+  `v0-c59e7edd73`. From `results/v0/serve/bundle_report.json`: 4,190 items, bundle within
+  `serving.max_rss_mb` after load in a fresh interpreter (`within_budget: true`; size and RSS in the
+  report).
+- `eval.val` reran because `ml/eval/data.py` changed (D47); val tables reproduce, with float-level
+  differences in the projection rows (GPU training is not bit-reproducible, D43).
+- Committed `results/v0/serve/`, `results/v0/training/lightgcn_serve.csv` and the refreshed val files.
+
+### Gate (Week 5)
+- [x] Val results with strata and CIs for every model incl. projection, shuffled control, static fusion
+- [x] LightGCN >= ALS on val NDCG@10 (D44); projection null result reported (D46)
+- [x] MVP blend `recommend` on real artifacts; bundle v0 exported; RSS within budget
+- [ ] Recommendations viewed in the browser on the real bundle (`dev/dev_server.py`; needs the
+  downloaded `serve_bundle_v0.tar.gz`)
+- [ ] Teammate swaps the mock for the real bundle (API contract section 1.1)
+- [ ] User reviews the gate

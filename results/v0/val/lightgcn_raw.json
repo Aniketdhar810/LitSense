@@ -116,6 +116,6 @@
     "zero_degree_items": 379,
     "device": "cuda",
     "torch": "2.11.0+cu130",
-    "seconds": 228.0
+    "seconds": 228.1
   }
 }

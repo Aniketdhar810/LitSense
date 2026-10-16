@@ -1,0 +1,55 @@
+{
+  "bundle_version": "v0-c59e7edd73",
+  "cutoff": 1692625493318,
+  "n_items": 4190,
+  "bundle_bytes": 7948725,
+  "tar_bytes": 6874743,
+  "rss_mb_after_load": 97.8,
+  "max_rss_mb": 350.0,
+  "within_budget": true,
+  "files": {
+    "catalog.npz": {
+      "bytes": 216976
+    },
+    "catalog_text.json.gz": {
+      "bytes": 2218163
+    },
+    "content_item.f16.npy": {
+      "bytes": 3218048,
+      "shape": [
+        4190,
+        384
+      ]
+    },
+    "corpus_users.npz": {
+      "bytes": 383586
+    },
+    "item_nn.npy": {
+      "bytes": 838128,
+      "shape": [
+        4190,
+        50
+      ]
+    },
+    "lgcn_item.f16.npy": {
+      "bytes": 536448,
+      "shape": [
+        4190,
+        64
+      ]
+    },
+    "lgcn_item_norm.f16.npy": {
+      "bytes": 536448,
+      "shape": [
+        4190,
+        64
+      ]
+    },
+    "trending_top.npy": {
+      "bytes": 928,
+      "shape": [
+        200
+      ]
+    }
+  }
+}
