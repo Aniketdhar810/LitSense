@@ -140,6 +140,9 @@ serving:
   onnx_quantized: true
   onnx_threads: 1
   verify_hashes_on_load: false
+  corpus_users: 300             # demo accounts with exact LightGCN vectors in the bundle
+  trending_top: 200
+  description_chars: 1500       # blurb length kept in catalog_text
 
 llm:
   enabled: true

@@ -37,6 +37,31 @@ What the mock does and does not do:
   with "Mock". `metrics_report()` returns the admin JSON shape with every metric `null`.
 - `load_store` and `download_bundle` do nothing (no network, no files); `health()` reports `"mock": true`.
 
+### 1.1 The real package (v0 bundle, Week 5)
+
+These functions now run on the real v0 bundle; everything else still comes from `litsense_core.mock`:
+
+```python
+import litsense_core as core
+from litsense_core import mock                  # still used for rails, search, chat, explain, ...
+
+bundle = core.download_bundle(RELEASE_ASSET_URL, "/tmp/litsense")   # or an unpacked folder
+core.load_store(bundle)                         # once at startup
+core.health()                                   # {"mock": false, "bundle_version": "v0-...", ...}
+core.catalog()                                  # every book, to seed the books table (book_id = model index)
+core.recommend(state, k=10, filters=None, exclude=None)   # -> RecResponse
+```
+
+- Same signatures and schemas as the mock. `book_id` is the bundle's item index (v0: 4,190 books), not the
+  mock's 0–199, so reseed the `books` table from `core.catalog()` when switching.
+- Demo accounts: `UserState(corpus_user_id=...)` with that reader's ratings gets their exact LightGCN vector.
+  The bundle holds 300 demo readers and their rating histories (`corpus_users.npz`); `dev/dev_server.py`
+  shows how to build their `UserState`.
+- Ranking is the blend ranker (§12.3); `degraded` stays false. Reasons use templates 1, 3, 5 and 6 of §12.5
+  (aspect and onboarding-theme reasons arrive with aspects and the text encoder).
+- `dev/dev_server.py --bundle <dir>` serves a page that lists demo readers with their recommendations, plus
+  `POST /recommend` with `{"state": UserState, "k": 10}` for example payloads.
+
 ## 2. Public functions (CLAUDE.md §15.1)
 
 `book_id` everywhere is the integer item index from `id_map.json`; the backend stores it as
@@ -141,4 +166,5 @@ the pipeline. The mock adds `"is_mock": true` and leaves every metric `null`. Sh
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 0.1.0 | 2026-10-17 | No schema change. Real `load_store`, `download_bundle`, `health`, `catalog`, `recommend` over the v0 bundle (section 1.1); `health()` adds `components`. |
 | 0.1.0 | 2026-10-12 | First contract and mock. Differences from CLAUDE.md §15.2, all with identical JSON: `because_you_liked` items are `BecauseYouLiked`, clarification options are `ClarificationOption{label, value}`, history entries are `ChatMessage{role, text}`. Added input validation (ms timestamps, 1–5 stars, `book_id ≥ 0`), `Bucket`/`Intent` literals, `ASPECT_LABELS`, and the proposed `CatalogBook`/`catalog()`. |

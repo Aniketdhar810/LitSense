@@ -733,3 +733,41 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   and the `proj_hybrid_score` feature (s13), where the ranker decides how much it helps; static
   fusion stays a control. Possible later val-only experiments (not scheduled): higher projection
   `lr`/`epochs`, W initialized at zero.
+
+## 2026-10-17: Week 5, MVP recommender and bundle v0
+
+### D47. Serve artifacts, bundle v0 and the MVP `recommend`
+- **Serve set:** stage `models.lightgcn_serve` trains LightGCN on every interaction (cutoff = newest
+  ts + 1 ms, `ml.eval.data.serve_fit_data`) with the same early-stopping recipe as val. Catalogue
+  statistics (Bayesian rating, counts, rating std, trending, long tail, reviewed-interaction counts) are
+  computed at that cutoff inside `serve.export`.
+- **Bundle format lives in `litsense_core/store.py`** and `ml/serve/export.py` imports its names, so
+  writer and reader cannot drift. v0 files: `catalog.npz`, `catalog_text.json.gz`, `lgcn_item.f16.npy`,
+  `lgcn_item_norm.f16.npy`, `content_item.f16.npy`, `item_nn.npy`, `trending_top.npy`,
+  `corpus_users.npz` (the `serving.corpus_users` most active readers: ids, exact LightGCN vectors and
+  rating histories for demo accounts), `manifest.json` (version = data version + hash of the file
+  hashes, cutoff, shapes, sha256, the config slice the core reads, `components` flags).
+  Author, series and genre indices are derived at load from `catalog.npz` instead of shipped as JSON
+  (s4.6 lists them as files; derivation is cheap and avoids a second copy). Genres are a uint64
+  bitmask over the sorted label set.
+- **Not in v0 (later weeks, flagged in `components`):** aspects/descriptors, review centroids,
+  snippets, projection, ONNX encoder, spoiler model, LightGBM ranker.
+- **MVP choices beyond s12:**
+  - "Now" for time decay is the reader's newest event (deterministic profiles).
+  - Seen = rated + read/dropped + dismissed + onboarding picks (D12); sources skip seen items so they
+    do not waste quota.
+  - Until the projection is bundled, the `longtail` source ranks tail items by normalized LightGCN
+    when a CF vector exists (D46: normalization carries the long-tail gain), else by content.
+  - The `aspect` source is empty until aspects exist.
+  - Filters: unknown year or pages pass year/page filters; `min_reviews_main_feed` uses reviewed
+    interactions and spares `longtail` items (s13.2).
+  - Template 3 for a liked book without stars (a pick or reading-list add) says "which you liked".
+  - The blend (s12.3) only scores `cf`, `semantic` and `popularity` ranks, so items found only by
+    `item_item`, `author` or `longtail` tie at the bottom of the blend; the exploration slot and the
+    Week-9 ranker are what lift them. Kept as specified.
+- **Config:** new keys `serving.corpus_users: 300`, `serving.trending_top: 200`,
+  `serving.description_chars: 1500`.
+- **Dev server without FastAPI:** `dev/dev_server.py` uses the standard library (`http.server`), so it
+  adds no dependency; it is never deployed.
+- **RSS:** `serve.export` loads the bundle in a fresh interpreter and records RSS in
+  `results/<v>/serve/bundle_report.json` (Linux `/proc`; null on Windows).

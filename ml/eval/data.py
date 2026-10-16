@@ -107,6 +107,12 @@ def build_eval_data(
     )
 
 
+def serve_fit_data(interactions: pd.DataFrame, n_users: int, n_items: int) -> FitData:
+    """Every interaction, for the ``serve`` artifact set (s3.2); cutoff = newest ts + 1 ms."""
+    rows = interactions[["u", "i", "rating", "ts"]].reset_index(drop=True)
+    return FitData(rows, n_users, n_items, int(rows["ts"].max()) + 1)
+
+
 def sparsity_bucket(count: int, buckets: Sequence[Sequence[int]]) -> str:
     """``"lo-hi"`` label of the bucket holding ``count`` (``data.sparsity_buckets``)."""
     for lo, hi in buckets:

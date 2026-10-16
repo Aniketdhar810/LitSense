@@ -21,6 +21,7 @@ import ml.eval.validation  # noqa: F401  (registers the stage)
 import ml.models.lightgcn  # noqa: F401  (registers the stage)
 import ml.models.projection  # noqa: F401  (registers the stage)
 import ml.nlp.content  # noqa: F401  (registers the stage)
+import ml.serve.export  # noqa: F401  (registers the stage)
 from ml.common.manifest import read_manifest
 from ml.common.stage import RunPaths, run_all
 from ml.eval.data import FitData
@@ -194,3 +195,31 @@ def test_stage_on_the_tiny_fixture(small_core: Config) -> None:
     emb = np.load(paths.resolve("artifacts:content/content_item.npy"))
     books = pd.read_parquet(paths.resolve("data:books.parquet"))
     assert emb.shape == (len(books), 16)
+
+
+def test_serve_bundle_on_the_tiny_fixture(small_core: Config) -> None:
+    import litsense_core
+    from litsense_core.schemas import RatingEvent, UserState
+
+    run_all(small_core, until="serve.export")
+    paths = RunPaths.from_config(small_core, None)
+    bundle = paths.resolve("artifacts:serve_bundle/")
+    report = json.loads(paths.resolve("results:serve/bundle_report.json").read_text("utf-8"))
+    assert paths.resolve("artifacts:serve_bundle.tar.gz").stat().st_size > 0
+    interactions = pd.read_parquet(paths.resolve("data:interactions.parquet"))
+    assert report["cutoff"] == int(interactions["ts"].max()) + 1  # serve set: every interaction
+    store = litsense_core.load_store(bundle)
+    assert store.n_items == report["n_items"] and store.cutoff == report["cutoff"]
+    trained = read_manifest(paths.manifest("models.lightgcn_serve"))
+    assert trained["cutoff"] == report["cutoff"]
+    assert int(store.catalog["rating_count"].sum()) == len(interactions)
+    first = interactions[interactions["u"] == 0]
+    state = UserState(
+        ratings=[
+            RatingEvent(book_id=int(r.i), stars=float(r.rating), ts=int(r.ts))
+            for r in first.itertuples()
+        ]  # fmt: skip
+    )
+    resp = litsense_core.recommend(state, k=5)
+    assert resp.items and not {i.book_id for i in resp.items} & set(first["i"])
+    assert resp.model_version == report["bundle_version"]

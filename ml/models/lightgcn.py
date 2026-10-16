@@ -10,14 +10,15 @@
   epoch count. Only that refit is saved, and only after it finishes (s2.2 #6).
 
 Stage ``models.lightgcn_val`` trains on train (cutoff t1) and writes ``artifacts/<v>/eval_val/
-lightgcn/``. The test-mode artifact set (train + val, t2) is built in Week 13 by the same function.
+lightgcn/``; ``models.lightgcn_serve`` fits every interaction for the serving bundle (``serve/lightgcn/``).
+The test-mode artifact set (train + val, t2) is built in Week 13 by the same function.
 """
 
 import json
 import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 import pandas as pd
@@ -27,7 +28,7 @@ from torch import nn
 
 from ml.common.io import load_id_map
 from ml.common.stage import StageContext, stage
-from ml.eval.data import EvalData, Mode, build_eval_data
+from ml.eval.data import EvalData, FitData, Mode, build_eval_data, serve_fit_data
 from ml.eval.evaluator import evaluate
 from ml.models.embedding_scorers import EmbeddingArtifact, EmbeddingScorer, l2_normalize_rows
 
@@ -234,16 +235,14 @@ def inner_split(rows: pd.DataFrame, fraction: float, min_user: int) -> pd.Series
 
 
 def inner_eval_data(
-    data: EvalData, fraction: float, min_user: int, relevance: float, longtail: float
+    fit: FitData, fraction: float, min_user: int, relevance: float, longtail: float
 ) -> EvalData:
-    """Inner validation carved from ``data``'s fit window, built by the shared ``build_eval_data``
+    """Inner validation carved from the fit window, built by the shared ``build_eval_data``
     (held rows play the role of the val split; same relevance rule and masks)."""
-    rows = data.fit.interactions.copy()
+    rows = fit.interactions.copy()
     rows["split"] = np.where(inner_split(rows, fraction, min_user), "val", "train")
-    splits = {"t1": {"ms": data.cutoff}}
-    return build_eval_data(
-        rows, splits, "val", data.fit.n_users, data.fit.n_items, relevance, longtail
-    )
+    splits = {"t1": {"ms": fit.cutoff}}
+    return build_eval_data(rows, splits, "val", fit.n_users, fit.n_items, relevance, longtail)
 
 
 def inner_metric(data: EvalData, metric: str) -> EvalFn:
@@ -260,27 +259,34 @@ def inner_metric(data: EvalData, metric: str) -> EvalFn:
     return run
 
 
-def build_lightgcn(ctx: StageContext, mode: Mode, folder: str, history: str) -> None:
-    """Early-stopping search on the inner split, refit on the whole fit window, save."""
+def build_lightgcn(
+    ctx: StageContext, mode: Mode | Literal["serve"], folder: str, history: str
+) -> None:
+    """Early-stopping search on the inner split, refit on the whole fit window, save. ``serve``
+    fits on every interaction (s3.2); ``val``/``test`` on their evaluation fit window."""
     ids = load_id_map(ctx.path("data:id_map.json"))
-    splits = json.loads(ctx.path("data:splits.json").read_text(encoding="utf-8"))
     relevance = float(ctx.param("data.relevance_min_rating"))
     longtail = float(ctx.param("data.longtail_fraction"))
-    data = build_eval_data(
-        pd.read_parquet(ctx.path("data:interactions.parquet")),
-        splits, mode, ids.n_users, ids.n_items, relevance, longtail,
-    )  # fmt: skip
-    ctx.cutoff = data.cutoff
+    interactions = pd.read_parquet(ctx.path("data:interactions.parquet"))
+    if mode == "serve":
+        fit = serve_fit_data(interactions, ids.n_users, ids.n_items)
+    else:
+        splits = json.loads(ctx.path("data:splits.json").read_text(encoding="utf-8"))
+        fit = build_eval_data(
+            interactions, splits, mode, ids.n_users, ids.n_items, relevance, longtail
+        ).fit
+    item_counts = np.bincount(fit.interactions["i"], minlength=ids.n_items)
+    ctx.cutoff = fit.cutoff
     params = ctx.param("models.lightgcn")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     ctx.log.info("training on %s (torch %s)", device, torch.__version__)
     started = time.monotonic()
 
     inner = inner_eval_data(
-        data, float(params["inner_val_fraction"]), int(params["inner_val_min_user"]),
+        fit, float(params["inner_val_fraction"]), int(params["inner_val_min_user"]),
         relevance, longtail,
     )  # fmt: skip
-    ctx.count("fit_interactions", len(data.fit.interactions))
+    ctx.count("fit_interactions", len(fit.interactions))
     ctx.count("inner_train_interactions", len(inner.fit.interactions))
     ctx.count("inner_val_users", len(inner.users))
     max_epochs = int(params["max_epochs"])
@@ -293,7 +299,7 @@ def build_lightgcn(ctx: StageContext, mode: Mode, folder: str, history: str) -> 
         ctx.log.warning("no inner validation users; training for max_epochs without stopping")
         search = TrainResult(np.empty(0), np.empty(0), 0, max_epochs)
     final = train_lightgcn(
-        data.fit.interactions, ids.n_users, ids.n_items, params, ctx.seed, search.best_epoch,
+        fit.interactions, ids.n_users, ids.n_items, params, ctx.seed, search.best_epoch,
         device,
     )  # fmt: skip
     dim = int(params["dim"])
@@ -304,16 +310,16 @@ def build_lightgcn(ctx: StageContext, mode: Mode, folder: str, history: str) -> 
     np.save(out["lgcn_user.npy"], final.user)
     np.save(out["lgcn_item.npy"], final.item)
     np.save(out["lgcn_item_norm.npy"], l2_normalize_rows(final.item))
-    np.save(out["item_degree.npy"], data.item_counts.astype(np.int64))
+    np.save(out["item_degree.npy"], item_counts.astype(np.int64))
     meta = {
         "model": "lightgcn",
         "mode": mode,
-        "cutoff": data.cutoff,
+        "cutoff": fit.cutoff,
         "params": dict(params),
         "best_epoch": search.best_epoch,
         "search_epochs": search.epochs,
         "best_inner_metric": search.best_metric,
-        "zero_degree_items": int((data.item_counts == 0).sum()),
+        "zero_degree_items": int((item_counts == 0).sum()),
         "device": device,
         "torch": torch.__version__,
         "seconds": round(time.monotonic() - started, 1),
@@ -342,3 +348,18 @@ VAL_HISTORY = "results:training/lightgcn_val.csv"
 def build_lightgcn_val(ctx: StageContext) -> None:
     """LightGCN fit on train (cutoff t1) for validation."""
     build_lightgcn(ctx, "val", VAL_FOLDER, VAL_HISTORY)
+
+
+SERVE_FOLDER = "serve/lightgcn"
+SERVE_HISTORY = "results:training/lightgcn_serve.csv"
+
+
+@stage(
+    "models.lightgcn_serve",
+    inputs=["data:interactions.parquet", "data:id_map.json"],
+    outputs=[f"artifacts:{SERVE_FOLDER}/{name}" for name in LIGHTGCN_FILES] + [SERVE_HISTORY],
+    config_keys=["models.lightgcn", "data.relevance_min_rating", "data.longtail_fraction"],
+)
+def build_lightgcn_serve(ctx: StageContext) -> None:
+    """LightGCN fit on every interaction, for the serving bundle (s3.2, s12)."""
+    build_lightgcn(ctx, "serve", SERVE_FOLDER, SERVE_HISTORY)

@@ -213,7 +213,8 @@ Use a GPU runtime (Runtime > Change runtime type > T4 GPU). Run the setup cells,
 below:
 `nlp.content` embeds every book's metadata with MiniLM, `models.lightgcn_val` trains LightGCN on
 train with early stopping, and `eval.val` fits random, popularity, ItemKNN, ALS and content-only and
-evaluates them with both LightGCN variants on validation. Results go to
+evaluates them with both LightGCN variants on validation. `models.lightgcn_serve` and
+`serve.export` then build the serving bundle (`artifacts/v0/serve_bundle.tar.gz`). Results go to
 `MyDrive/litsense/results/v0/val/`, `results/v0/content/` and `results/v0/training/`. The last cell
 finishes uploading to Drive.
 """,
@@ -224,6 +225,7 @@ finishes uploading to Drive.
         """
 %cd /content/LitSense
 !python -m ml.stages run all --until eval.val < /dev/null
+!python -m ml.stages run all --until serve.export < /dev/null
 """,
     ),
     (
