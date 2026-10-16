@@ -31,6 +31,7 @@ STAGE_MODULES: tuple[str, ...] = (
     "ml.data.eda",
     "ml.nlp.content",
     "ml.models.lightgcn",
+    "ml.models.projection",
     "ml.eval.validation",
 )
 

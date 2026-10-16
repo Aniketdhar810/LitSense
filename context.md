@@ -23,7 +23,8 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
   Content-only is strongest on long-tail and cold-item truth; popularity recommends no long-tail items.
 - **Week 4 gate:** approved by the user (2026-10-15).
 - **Week 5 in progress:** LightGCN done and run on Colab (D43, D44): it beats ALS on val NDCG@10 and ties
-  ItemKNN. Next: projection hybrid and controls, then the MVP `recommend` and bundle v0.
+  ItemKNN. Projection hybrid + controls built (D45), waiting for a Colab run; then the MVP `recommend`
+  and bundle v0.
 - **Next step: Week 5** (§17):
   - LightGCN, raw and normalized (§9.4), with artifacts and manifests in `artifacts/v0/eval_val/`;
   - the projection hybrid with shuffled and static-fusion controls (§9.5);
