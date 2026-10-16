@@ -667,3 +667,19 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   T4 GPU runtime.
 - **Hyperparameters:** the s5 values for the first run; if the best epoch is the last one allowed,
   training was still improving and `lr`/`max_epochs` are tuned on val (logged here).
+
+### D44. First LightGCN run on v0 (Colab T4, 2026-10-16): gate check and settings kept
+- **Run:** `models.lightgcn_val` took 234 s on a T4 (inner search 300 epochs, best epoch 275, then the
+  refit); 379 items have no train interactions. Inner NDCG@20 rose quickly to epoch ~200 and changed
+  little over the last 60 epochs (`results/v0/training/lightgcn_val.csv`), so the s5 values
+  (lr 1e-3, `max_epochs` 300) are kept; no tuning yet.
+- **Week 5 gate item "LightGCN >= ALS on val": met.** In `results/v0/val/bootstrap.csv`, ALS minus
+  `lightgcn_raw` on NDCG@10 has a 95% CI below zero; on Recall@20 the CI crosses zero. ItemKNN and
+  `lightgcn_raw` are not distinguishable on either metric (CIs cross zero).
+- **Normalization (s2.2 #1) shows up as expected:** `lightgcn_norm` is below `lightgcn_raw` on all
+  users but above it on long-tail truth, with far higher coverage and tail share
+  (`table_main.csv`, `table_longtail.csv`). Long-tail claims must compare against both.
+- **Baselines reproduced:** the refit baselines match Week 4; ALS differs only in the 7th decimal
+  (multithreaded BLAS float order).
+- **Colab environment noise (harmless):** pip warns about google-colab's own pins, and `implicit`
+  disables its GPU module (CPU ALS is what we use).

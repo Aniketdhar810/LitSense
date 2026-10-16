@@ -370,3 +370,20 @@
   2 skipped (local raw samples absent in this worktree).
 - Next: one Colab run (`run all --until eval.val`, GPU); then the Week 5 gate check (LightGCN vs
   ALS on val), the projection hybrid and its controls.
+
+## 2026-10-16: LightGCN on Colab (Week 5, part 1 results)
+
+- Colab T4 run of `run all --until eval.val` (main after PR #20): data stages and `nlp.content` up to
+  date; `models.lightgcn_val` 234 s (best inner epoch 275); `eval.val` 23 s, 2,578 evaluated users,
+  4,190 items.
+- Committed `results/v0/val/` (now with `lightgcn_raw` and `lightgcn_norm`, paired bootstraps
+  against both) and `results/v0/training/lightgcn_val.csv`.
+- From those files: LightGCN raw beats ALS on NDCG@10 (paired 95% CI excludes zero; Recall@20 CI
+  crosses zero) and ties ItemKNN; normalized LightGCN trades all-user accuracy for long-tail accuracy
+  and coverage. Details and reasoning in D44.
+
+### Gate (Week 5): status
+- [x] LightGCN raw and normalized on val with strata and CIs; LightGCN >= ALS (NDCG@10)
+- [ ] Projection hybrid, projection-shuffled and static-fusion controls on val
+- [ ] MVP blend `recommend` on real artifacts; bundle export v0
+- [ ] User reviews the gate
