@@ -10,7 +10,8 @@
   epoch count. Only that refit is saved, and only after it finishes (s2.2 #6).
 
 Stage ``models.lightgcn_val`` trains on train (cutoff t1) and writes ``artifacts/<v>/eval_val/
-lightgcn/``; ``models.lightgcn_serve`` fits every interaction for the serving bundle (``serve/lightgcn/``).
+lightgcn/``; ``models.lightgcn_serve`` fits every interaction for the serving bundle
+(``serve/lightgcn/``).
 The test-mode artifact set (train + val, t2) is built in Week 13 by the same function.
 """
 
