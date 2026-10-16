@@ -415,3 +415,19 @@
 - [x] LightGCN >= ALS on val (NDCG@10, D44)
 - [ ] MVP blend `recommend` on real artifacts; bundle export v0; recommendations visible in the browser
 - [ ] User reviews the gate
+
+## 2026-10-17: MVP recommend and bundle v0 (Week 5, part 3)
+
+- The user kept the projection as is (D46) and asked for the MVP and bundle.
+- Built: stage `models.lightgcn_serve`; `ml/serve/export.py` (stage `serve.export`: bundle, tarball,
+  `results/<v>/serve/bundle_report.json` with size and RSS); `litsense_core` `store`, `vector_index`,
+  `profile`, `candidates`, `rank` (blend), `postprocess` (MMR, genre cap, exploration slot),
+  `reasons`, `recommend` (with `continue_series`, `catalog`, `health`, `download_bundle`);
+  `dev/dev_server.py` (standard library viewer); API contract section 1.1 (D47).
+- Tests: `tests/litsense_core/test_recommend.py` over a synthetic bundle written by the real writer
+  (store shape checks, k unique unseen items, filters and muted genres, series guard and
+  `continue_series`, cold paths, exact vs pseudo CF, invalid ids, author reason, catalog, helpers);
+  the tiny fixture through `serve.export` and `recommend`. Dev server smoke-tested on the synthetic
+  bundle. `pytest -m "not slow"`: 293 passed, 2 skipped.
+- Next: one Colab run (`run all --until serve.export`), then measure the real bundle (size, RSS),
+  view it with the dev server, and close the Week 5 gate.

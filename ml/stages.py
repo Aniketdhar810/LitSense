@@ -33,6 +33,7 @@ STAGE_MODULES: tuple[str, ...] = (
     "ml.models.lightgcn",
     "ml.models.projection",
     "ml.eval.validation",
+    "ml.serve.export",
 )
 
 

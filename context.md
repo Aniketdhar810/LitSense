@@ -1,7 +1,7 @@
 # LitSense: session handoff (as of 2026-10-16)
 
 Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/progress.md` (session log) and
-`docs/decisions.md` (D1–D46, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
+`docs/decisions.md` (D1–D47, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
 
 ## Where the project stands
 
@@ -33,8 +33,13 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
     long tail with higher coverage. Content-only is still the only strong model on cold items.
 - **Projection results committed (D46):** a null result (projection = shuffled control; static fusion
   alpha 0.7 is the best fusion row; no fusion recovers cold items).
-- **Rest of Week 5** (§17): the MVP blend `recommend` on real artifacts (§12) and bundle export v0
-  (`serve.export`), so the teammate can swap the mock for the real bundle.
+- **MVP built (D47):** `models.lightgcn_serve`, `serve.export` (bundle + tarball + bundle report),
+  and the real `litsense_core` `load_store`, `download_bundle`, `health`, `catalog`, `recommend`
+  (blend ranker, filters, series guard, MMR, genre cap, template reasons); `dev/dev_server.py` shows
+  demo readers' recommendations in a browser. Other §15.1 functions still come from the mock.
+- **Waiting on the user:** the Colab run of `run all --until serve.export` (T4), then download
+  `serve_bundle.tar.gz` and the results zip. Then: commit `results/v0/serve/`, check RSS against
+  `serving.max_rss_mb`, view the bundle locally with the dev server, and close the Week 5 gate.
 - **Week 5 gate:** val results with strata and CIs for every model incl. projection and shuffled
   (LightGCN >= ALS is met); recommendations visible in the browser; user review.
 
