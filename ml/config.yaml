@@ -73,7 +73,7 @@ models:
   als: {factors: 64, regularization: 0.01, iterations: 30, alpha: 20}
   itemknn: {k: 100, shrink: 10}
   popularity: {bayes_m: 10, trend_half_life_days: 180}
-  projection: {lr: 0.001, epochs: 10, steps_per_epoch: 1000, batch_size: 1024,
+  projection: {lr: 0.001, epochs: 10, steps_per_epoch: 1000, batch_size: 1024, n_negs: 5,
                normalize_items: true, shuffled_control: true}
   static_fusion_alphas: [0.5, 0.7, 0.9]   # control only
 

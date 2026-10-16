@@ -683,3 +683,31 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   (multithreaded BLAS float order).
 - **Colab environment noise (harmless):** pip warns about google-colab's own pins, and `implicit`
   disables its GPU module (CPU ALS is what we use).
+
+## 2026-10-16: Week 5, projection hybrid and controls
+
+### D45. Projection hybrid, shuffled control and static fusion
+- **Stage `models.projection_val`** (`ml/models/projection.py`) trains W (dim x 384, no bias,
+  Xavier-uniform init, seeded) by BPR with LightGCN users and items frozen, and writes
+  `artifacts/<v>/eval_val/projection/` and `.../projection_shuffled/` (`W.npy`, `proj_item.npy`,
+  the LightGCN `user.npy` it scores with, `item_degree.npy`, `meta.json` with the normalize flag and
+  per-epoch BPR). Training and scoring use the same function: u . e'/|e'| with `normalize_items`
+  (scoring re-normalizes the stored, already normalized rows, which changes nothing).
+- **New config key `models.projection.n_negs: 5`** (s9.5 says negatives come from
+  `sample_negatives` but names no count; 5 matches LightGCN). Each step draws a batch of fit
+  positive pairs uniformly with replacement.
+- **Cold items:** e_gcn = 0 for items without train interactions, so their vector is W c only.
+  They are never positives in the fit window but can be drawn as negatives. Both projection scorers
+  rank cold items (`EmbeddingScorer(score_cold=True)`); LightGCN scorers still give them -inf.
+- **Shuffled control** permutes the content rows with the stage RNG and is otherwise identical; the
+  stage refuses `shuffled_control: false`, since s9.5 requires the control.
+- **Static fusion (interpretation of s9.5):** score = alpha * cos(u, e_gcn) + (1 - alpha) *
+  cos(p_u, PCA(c)), where PCA reduces content to the LightGCN dim (centered SVD, numpy) and p_u is the
+  content-only profile (s9.2) in that space. It is one dot product of concatenated vectors
+  [alpha * u/|u|, (1 - alpha) * p_u] . [e_gcn/|e_gcn|, PCA(c)/|PCA(c)|]. Summing
+  normalize(e_gcn) + normalize(W_pca c) into one 64-d vector and scoring it with the LightGCN user
+  vector (the literal reading) would mix two unaligned spaces, so the content half would be noise.
+  Built inside `eval.val` (no training), one row per `models.static_fusion_alphas`; the best alpha is
+  read from val only.
+- **Speed:** about 6 s per 100 steps on a laptop CPU (10,000 steps per variant), so Colab runs on
+  a T4.

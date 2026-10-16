@@ -387,3 +387,15 @@
 - [ ] Projection hybrid, projection-shuffled and static-fusion controls on val
 - [ ] MVP blend `recommend` on real artifacts; bundle export v0
 - [ ] User reviews the gate
+
+## 2026-10-16: Projection hybrid and controls built (Week 5, part 2)
+
+- Built `ml/models/projection.py` (stage `models.projection_val`: projection + shuffled control),
+  `StaticFusionScorer`, `pca` and `check_artifact` in `ml/models/embedding_scorers.py`; `eval.val`
+  now also evaluates `projection`, `projection_shuffled` and `static_fusion_{0.5,0.7,0.9}` (D45).
+- Tests (`tests/ml/models/test_projection.py`): same normalization in training and scoring, cold
+  items represented by W c only, raw vs normalized items, seeding, loss decreases, cold items scored,
+  static fusion (alpha 1 ranks like normalized LightGCN; cold items scored by content; cutoff check);
+  the tiny fixture runs through `eval.val` with every model. `pytest -m "not slow"`: 284 passed,
+  2 skipped (local raw samples absent).
+- Next: one Colab run (`run all --until eval.val`, T4); then the Week 5 projection rows.

@@ -2,9 +2,10 @@
 paired comparisons, tables and figures.
 
 Baselines are cheap to fit, so they are refit here instead of keeping model artifacts (D40).
-LightGCN is trained by its own stage and loaded from ``artifacts/<v>/eval_val/``; its artifact
-metadata is copied next to its results (s2.2 #5). Every model is compared, paired, with popularity
-and with both LightGCN variants (s2.2 #1).
+LightGCN and the projection hybrid (with its shuffled control) are trained by their own stages and
+loaded from ``artifacts/<v>/eval_val/``; their artifact metadata is copied next to their results
+(s2.2 #5). Static fusion (s9.5 control) is built here, one row per ``models.static_fusion_alphas``
+value. Every model is compared, paired, with popularity and with both LightGCN variants (s2.2 #1).
 """
 
 import json
@@ -25,13 +26,19 @@ from ml.models.baselines import (
     PopularityScorer,
     RandomScorer,
 )
-from ml.models.embedding_scorers import EmbeddingArtifact, EmbeddingScorer
+from ml.models.embedding_scorers import EmbeddingArtifact, EmbeddingScorer, StaticFusionScorer
 
 REFERENCES = ("popularity", "lightgcn_raw", "lightgcn_norm")
 PAIRED_METRICS = ("ndcg@10", "recall@20")
 LIGHTGCN_INPUTS = [
     f"artifacts:eval_val/lightgcn/{name}"
     for name in ("lgcn_user.npy", "lgcn_item.npy", "item_degree.npy", "meta.json")
+]
+PROJECTIONS = ("projection", "projection_shuffled")
+PROJECTION_INPUTS = [
+    f"artifacts:eval_val/{model}/{name}"
+    for model in PROJECTIONS
+    for name in ("user.npy", "proj_item.npy", "item_degree.npy", "meta.json")
 ]
 
 
@@ -43,6 +50,7 @@ LIGHTGCN_INPUTS = [
         "data:id_map.json",
         "artifacts:content/content_item.npy",
         *LIGHTGCN_INPUTS,
+        *PROJECTION_INPUTS,
     ],
     outputs=["results:val/"],
     config_keys=[
@@ -53,10 +61,11 @@ LIGHTGCN_INPUTS = [
         "models.popularity",
         "models.itemknn",
         "models.als",
+        "models.static_fusion_alphas",
     ],
 )
 def build_val(ctx: StageContext) -> None:
-    """Validation results for the baselines and both LightGCN variants."""
+    """Validation results for the baselines, LightGCN, the projection hybrid and controls."""
     out = ctx.out("results:val/")
     ids = load_id_map(ctx.path("data:id_map.json"))
     splits = json.loads(ctx.path("data:splits.json").read_text(encoding="utf-8"))
@@ -86,6 +95,18 @@ def build_val(ctx: StageContext) -> None:
         ContentScorer(emb, relevance),
         EmbeddingScorer("lightgcn_raw", lightgcn, normalize_items=False),
         EmbeddingScorer("lightgcn_norm", lightgcn, normalize_items=True),
+    ]
+    for model in PROJECTIONS:
+        folder = ctx.path(f"artifacts:eval_val/{model}/meta.json").parent
+        artifact = EmbeddingArtifact.load(folder, "user.npy", "proj_item.npy")
+        scorers.append(
+            EmbeddingScorer(
+                model, artifact, bool(artifact.meta["normalize_items"]), score_cold=True
+            )
+        )
+    scorers += [
+        StaticFusionScorer(lightgcn, emb, float(alpha), relevance)
+        for alpha in ctx.param("models.static_fusion_alphas")
     ]
 
     results: dict[str, EvalResult] = {}

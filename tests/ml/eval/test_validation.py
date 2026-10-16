@@ -19,6 +19,7 @@ import ml.data.reviews  # noqa: F401  (registers the stage)
 import ml.data.split  # noqa: F401  (registers the stage)
 import ml.eval.validation  # noqa: F401  (registers the stage)
 import ml.models.lightgcn  # noqa: F401  (registers the stage)
+import ml.models.projection  # noqa: F401  (registers the stage)
 import ml.nlp.content  # noqa: F401  (registers the stage)
 from ml.common.manifest import read_manifest
 from ml.common.stage import RunPaths, run_all
@@ -142,6 +143,7 @@ def small_core(tiny_cfg: Config, monkeypatch: pytest.MonkeyPatch) -> Config:
         "patience": 1,
         "inner_val_min_user": 3,
     }
+    tiny_cfg["models"]["projection"] |= {"epochs": 1, "steps_per_epoch": 5, "batch_size": 32}
     return tiny_cfg
 
 
@@ -158,6 +160,11 @@ def test_stage_on_the_tiny_fixture(small_core: Config) -> None:
         "content",
         "lightgcn_raw",
         "lightgcn_norm",
+        "projection",
+        "projection_shuffled",
+        "static_fusion_0.5",
+        "static_fusion_0.7",
+        "static_fusion_0.9",
     }
     assert (table["ndcg@10_low"] <= table["ndcg@10"]).all()
     assert (table["ndcg@10"] <= table["ndcg@10_high"]).all()
@@ -182,6 +189,8 @@ def test_stage_on_the_tiny_fixture(small_core: Config) -> None:
     trained = read_manifest(paths.manifest("models.lightgcn_val"))
     assert trained["cutoff"] == splits["t1"]["ms"] and trained["status"] == "complete"
     assert paths.resolve("results:training/lightgcn_val.csv").exists()
+    proj = json.loads((out / "projection_shuffled.json").read_text(encoding="utf-8"))
+    assert proj["artifact"]["shuffled_content"] and proj["artifact"]["cutoff"] == splits["t1"]["ms"]
     emb = np.load(paths.resolve("artifacts:content/content_item.npy"))
     books = pd.read_parquet(paths.resolve("data:books.parquet"))
     assert emb.shape == (len(books), 16)
