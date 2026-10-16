@@ -1,7 +1,7 @@
 # LitSense: session handoff (as of 2026-10-16)
 
 Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/progress.md` (session log) and
-`docs/decisions.md` (D1–D45, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
+`docs/decisions.md` (D1–D46, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
 
 ## Where the project stands
 
@@ -31,9 +31,8 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
   - **LightGCN results are committed** (`results/v0/val/`, D44): raw LightGCN beats ALS on val NDCG@10
     (paired CI excludes zero) and ties ItemKNN; normalized LightGCN is weaker overall but stronger on the
     long tail with higher coverage. Content-only is still the only strong model on cold items.
-- **Waiting on the user:** the Colab run of `run all --until eval.val` (T4) for the projection rows, then
-  the zip `results_v0.zip` in Downloads. After that: commit the results, read the projection vs both
-  LightGCN variants and shuffled control (D45), and log it.
+- **Projection results committed (D46):** a null result (projection = shuffled control; static fusion
+  alpha 0.7 is the best fusion row; no fusion recovers cold items).
 - **Rest of Week 5** (§17): the MVP blend `recommend` on real artifacts (§12) and bundle export v0
   (`serve.export`), so the teammate can swap the mock for the real bundle.
 - **Week 5 gate:** val results with strata and CIs for every model incl. projection and shuffled

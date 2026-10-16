@@ -711,3 +711,25 @@ v0 stays as built, and Week 4 starts on it. Before v1:
   read from val only.
 - **Speed:** about 6 s per 100 steps on a laptop CPU (10,000 steps per variant), so Colab runs on
   a T4.
+
+### D46. Projection and controls on v0 val (Colab T4, 2026-10-16): a null result, reported as such
+- **Run:** `models.projection_val` 75 s (both variants, 10,000 steps each); `eval.val` 35 s.
+  `models.lightgcn_val` also reran (its import closure includes `embedding_scorers.py`, changed in
+  D45) and reproduced the same best epoch and metrics.
+- **Reading (from `results/v0/val/table_main.csv`, `table_longtail.csv`, `bootstrap.csv`):**
+  - The projection hybrid is below raw LightGCN on all users (paired CI below zero) and not
+    distinguishable from normalized LightGCN; on long-tail truth it is above raw LightGCN but below
+    normalized LightGCN.
+  - **Projection vs its shuffled control: no difference** on any headline metric. On v0 the
+    projection's gain over raw LightGCN on the long tail is a normalization effect, not a semantic
+    one (exactly the s2.2 #1 confound).
+  - Static fusion (best alpha 0.7 on val) is the strongest fusion row: it beats normalized LightGCN
+    on all users and on the long tail (paired CIs above zero), ties raw LightGCN on all users and
+    beats it on the long tail.
+  - **No fusion row recovers cold items** (cold-item NDCG@10 is zero): cold items are never positives
+    in training, and in static fusion their score has only the content half, so warm items outrank
+    them. Content-only remains the only model that ranks cold items.
+- **Kept as is:** no tuning of the projection on val yet. It stays the long-tail candidate source
+  and the `proj_hybrid_score` feature (s13), where the ranker decides how much it helps; static
+  fusion stays a control. Possible later val-only experiments (not scheduled): higher projection
+  `lr`/`epochs`, W initialized at zero.

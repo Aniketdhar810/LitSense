@@ -43,7 +43,7 @@ After each phase gate, write a short summary in `docs/progress.md`: the gate che
 
 ### 0.5 Current state and decisions that override this brief (read `context.md` first)
 
-`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D45, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
+`context.md` (repo root) is the session handoff: where the project stands, what is waiting on the user, and how to work in this environment. `docs/decisions.md` (D1–D46, F1–F12) records every deviation with its reasons. The user-approved deviations that change sections of this file:
 
 - **Stage fingerprints (§7.0):** code part = the stage's module plus its transitive `ml`/`litsense_core` imports, not the repo-wide git SHA (D6). Input identity = the sha256 the producer recorded (D7).
 - **Large sources are streamed, never stored (§7.1, §7.5, D18):** `url:<source>` stage inputs; `ml/data/stream.py` (gunzip on the fly, HTTP Range resume, `PartWriter` checkpoints). `data.download` keeps only the 5-core CSV on Drive (D19). `--sample N` reads heads in `local/raw_sample/`.
