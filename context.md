@@ -1,11 +1,12 @@
-# LitSense: session handoff (as of 2026-10-15)
+# LitSense: session handoff (as of 2026-10-16)
 
 Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/progress.md` (session log) and
-`docs/decisions.md` (D1–D42, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
+`docs/decisions.md` (D1–D45, F1–F12). Repo: https://github.com/Aniketdhar810/LitSense (owner `Aniketdhar810`).
 
 ## Where the project stands
 
-- **Weeks 0–4 are done; every PR is merged (#1–#18).** `main` holds everything.
+- **Weeks 0–4 are done and approved; Week 5 is in progress. Every PR is merged (#1–#22).** `main` holds
+  everything.
 - **Week 1 (Phase 0):** stage framework (`ml/common/stage.py`, CLI `python -m ml.stages`), config,
   `litsense_core/schemas.py` + `mock.py`, `docs/API_CONTRACT.md`, tiny fixture, CI.
 - **Weeks 2–3 (Phase 1, data):** stages `data.download`, `data.lid`, `data.meta`, `data.goodreads` (off by
@@ -13,23 +14,30 @@ Read this, then `CLAUDE.md` (the brief; §0.5 lists what overrides it), `docs/pr
   is frozen; hashes, fingerprint and sizing fraction are in `models/registry.json`, stats in
   `results/v0/eda/` and `results/v0/canonical/`. The merge audit is recorded as model-drafted verdicts,
   spot-checked by the user (D31–D33).
-- **Week 4 (Phase 2, harness and baselines):**
-  - `ml/eval/`: data, metrics, evaluator, strata, bootstrap, report, lock, errors.
-  - `ml/models/baselines.py`: random, popularity, ItemKNN, ALS, content-only.
-  - `ml/nlp/embed.py` and `ml/nlp/content.py`.
-  - Stages `nlp.content` and `eval.val` (formerly `eval.baselines_val`). Results are in `results/v0/val/` (tables with 95% CIs,
-    strata, long tail, paired bootstrap vs popularity, figures).
-- **Strongest baseline so far: ItemKNN** on NDCG@10 and Recall@20 (see `results/v0/val/table_main.csv`).
-  Content-only is strongest on long-tail and cold-item truth; popularity recommends no long-tail items.
-- **Week 4 gate:** approved by the user (2026-10-15).
-- **Week 5 in progress:** LightGCN done and run on Colab (D43, D44): it beats ALS on val NDCG@10 and ties
-  ItemKNN. Projection hybrid + controls built (D45), waiting for a Colab run; then the MVP `recommend`
-  and bundle v0.
-- **Next step: Week 5** (§17):
-  - LightGCN, raw and normalized (§9.4), with artifacts and manifests in `artifacts/v0/eval_val/`;
-  - the projection hybrid with shuffled and static-fusion controls (§9.5);
-  - the MVP blend `recommend` on real artifacts (§12), and bundle export v0.
-  The gate: LightGCN >= ALS on val, or a logged investigation.
+- **Week 4 (Phase 2, harness and baselines), gate approved 2026-10-15:**
+  - `ml/eval/`: data, metrics, evaluator, strata, bootstrap, report, lock, errors; stage `eval.val`
+    (`ml/eval/validation.py`, formerly `eval.baselines_val`).
+  - `ml/models/baselines.py`: random, popularity, ItemKNN, ALS, content-only (refit inside `eval.val`).
+  - `ml/nlp/embed.py` and `ml/nlp/content.py` (stage `nlp.content`).
+- **Week 5 (Phase 2, LightGCN and projection):**
+  - `ml/models/lightgcn.py`, stage `models.lightgcn_val` (D43): artifacts in
+    `artifacts/v0/eval_val/lightgcn/`, history in `results/v0/training/lightgcn_val.csv`.
+  - `ml/models/embedding_scorers.py` (numpy only): `lightgcn_raw`, `lightgcn_norm`, projection scorers
+    (cold items scored), `StaticFusionScorer`, `check_artifact`, `pca`.
+  - `ml/models/projection.py`, stage `models.projection_val` (D45): `projection` and
+    `projection_shuffled` artifacts in `artifacts/v0/eval_val/`.
+  - `eval.val` evaluates every model above plus `static_fusion_{0.5,0.7,0.9}`, with paired bootstraps
+    against popularity, `lightgcn_raw` and `lightgcn_norm`.
+  - **LightGCN results are committed** (`results/v0/val/`, D44): raw LightGCN beats ALS on val NDCG@10
+    (paired CI excludes zero) and ties ItemKNN; normalized LightGCN is weaker overall but stronger on the
+    long tail with higher coverage. Content-only is still the only strong model on cold items.
+- **Waiting on the user:** the Colab run of `run all --until eval.val` (T4) for the projection rows, then
+  the zip `results_v0.zip` in Downloads. After that: commit the results, read the projection vs both
+  LightGCN variants and shuffled control (D45), and log it.
+- **Rest of Week 5** (§17): the MVP blend `recommend` on real artifacts (§12) and bundle export v0
+  (`serve.export`), so the teammate can swap the mock for the real bundle.
+- **Week 5 gate:** val results with strata and CIs for every model incl. projection and shuffled
+  (LightGCN >= ALS is met); recommendations visible in the browser; user review.
 
 ## Open items for the v1 rebuild (D39; resolve before Week 11)
 
@@ -56,7 +64,7 @@ from google.colab import drive; drive.mount("/content/drive")
 %cd /content
 !rm -rf LitSense && git clone -q --depth 1 https://github.com/Aniketdhar810/LitSense.git
 %cd /content/LitSense
-!make install-colab > /dev/null && python -m ml.stages run all --until <STAGE> < /dev/null > /content/drive/MyDrive/litsense/run.log 2>&1; grep -vE "MB/s|lines," /content/drive/MyDrive/litsense/run.log | tail -40
+!make install-colab > /dev/null && python -m ml.stages run all --until <STAGE> < /dev/null > /content/drive/MyDrive/litsense/run.log 2>&1; grep -vE "MB/s|lines,|epoch [0-9]+:" /content/drive/MyDrive/litsense/run.log | tail -40
 import shutil; shutil.make_archive("/content/drive/MyDrive/litsense/results_v0", "zip", "/content/drive/MyDrive/litsense/results/v0")
 drive.flush_and_unmount(); print("saved to Drive")
 ```
@@ -71,9 +79,12 @@ drive.flush_and_unmount(); print("saved to Drive")
 
 ## How to work locally
 
-- Windows worktree under `.claude/worktrees/`; venv `.venv` (Python 3.12, no torch; scipy, implicit,
-  matplotlib installed). `.venv/Scripts/python.exe -m pytest -m "not slow"` (275 passed, 1 skipped);
-  `.venv/Scripts/ruff.exe check .` and `format --check .`. `gh` is `/c/Program Files/GitHub CLI/gh.exe`.
+- Windows worktree under `.claude/worktrees/`. The venv lives in another worktree:
+  `.claude/worktrees/litsense-phase-0-setup-07a939/.venv` (Python 3.12, CPU torch 2.14.0, scipy, implicit,
+  matplotlib). No `python` on PATH; call that venv's `Scripts/python.exe` with the repo as cwd
+  (`PYTHONPATH=.` for ad-hoc scripts). `python.exe -m pytest -m "not slow"` (284 passed, 2 skipped: local
+  raw samples absent); `Scripts/ruff.exe check .` and `format --check .`. Auto-merge is disabled on the
+  repo: wait for CI (`gh pr checks N --watch`), then `gh pr merge N --merge`. `gh` is `/c/Program Files/GitHub CLI/gh.exe`.
 - New branch from `origin/main` per piece of work; end commits with the `Co-Authored-By` line. CodeRabbit
   reviews PRs; address real findings in a follow-up PR.
 - Notebooks are generated by `notebooks/make_notebooks.py` (`python notebooks/make_notebooks.py notebooks`)
